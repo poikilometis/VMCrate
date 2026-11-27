@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="VMCrate.Tests" />
+    <ProjectReference Include="../VMCrate.Windows/VMCrate.Windows.csproj" />
+  </ItemGroup>
+</Project>

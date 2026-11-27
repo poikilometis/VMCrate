@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/VMCrate.Core/VMCrate.Core.csproj" />
+    <Project Path="src/VMCrate.Cli/VMCrate.Cli.csproj" />
+    <Project Path="src/VMCrate.Windows/VMCrate.Windows.csproj" />
+    <Project Path="src/VMCrate.Desktop/VMCrate.Desktop.csproj" />
+    <Project Path="src/VMCrate.Host/VMCrate.Host.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/VMCrate.Tests/VMCrate.Tests.csproj" />
+  </Folder>
+</Solution>

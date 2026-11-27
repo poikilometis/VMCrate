@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "id": "two-node-qa",
+  "machines": [
+    {
+      "name": "QA client",
+      "template": "Windows base",
+      "memoryGiB": 4,
+      "cpuCount": 2,
+      "segment": "qa"
+    },
+    {
+      "name": "QA peer",
+      "template": "Windows base",
+      "memoryGiB": 4,
+      "cpuCount": 2,
+      "segment": "qa"
+    }
+  ]
+}

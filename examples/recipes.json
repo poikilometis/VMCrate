@@ -1,0 +1,44 @@
+[
+  {
+    "id": "windows-offline",
+    "name": "Windows Offline",
+    "author": "VMCrate contributors",
+    "license": "MIT",
+    "version": 1,
+    "minimumVmCrate": "0.6.0",
+    "sources": ["https://www.microsoft.com/en-us/software-download/windows11"],
+    "blueprint": {
+      "version": 1,
+      "id": "windows-offline",
+      "machines": [{"name": "Windows inspection", "template": "Windows Base", "memoryGiB": 4, "cpuCount": 2}]
+    }
+  },
+  {
+    "id": "private-two-node",
+    "name": "Private lab (Windows and Linux)",
+    "author": "VMCrate contributors",
+    "license": "MIT",
+    "version": 1,
+    "minimumVmCrate": "0.6.0",
+    "sources": ["https://www.microsoft.com/en-us/software-download/windows11", "https://www.debian.org/distrib/"],
+    "blueprint": {
+      "version": 1,
+      "id": "private-two-node",
+      "machines": [
+        {"name": "Windows station", "template": "Windows Base", "memoryGiB": 4, "cpuCount": 2, "segment": "training"},
+        {"name": "Linux station", "template": "Linux Base", "memoryGiB": 2, "cpuCount": 2, "segment": "training"}
+      ]
+    }
+  },
+  {
+    "id": "linux-updates",
+    "name": "Linux builder with scoped updates",
+    "author": "VMCrate contributors",
+    "license": "MIT",
+    "version": 1,
+    "minimumVmCrate": "0.6.0",
+    "sources": ["https://www.kali.org/get-kali/"],
+    "publisherId": "kali",
+    "privateUpdates": true
+  }
+]

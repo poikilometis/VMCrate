@@ -1,0 +1,24 @@
+name: Translation correction
+description: Report a label, layout or right-to-left issue
+title: "[Translation] "
+body:
+  - type: input
+    id: locale
+    attributes:
+      label: Locale and VMCrate version
+      placeholder: "ru · 0.6.0-preview.2"
+    validations:
+      required: true
+  - type: input
+    id: screen
+    attributes:
+      label: Screen and translation key
+      placeholder: "Template builds · build.BootTest"
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Current wording or layout and suggested correction
+    validations:
+      required: true

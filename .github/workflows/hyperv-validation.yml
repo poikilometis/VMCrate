@@ -1,0 +1,27 @@
+name: Dedicated Hyper-V validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    runs-on: [self-hosted, Windows, X64, vmcrate-hyperv]
+    timeout-minutes: 60
+    env:
+      VMCRATE_TEST_FIXTURES: ${{ vars.VMCRATE_TEST_FIXTURES }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Run acceptance against local fixtures
+        shell: pwsh
+        run: ./tests/Start-HyperVAcceptance.ps1 -Fixtures $env:VMCRATE_TEST_FIXTURES
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hyperv-compatibility
+          path: artifacts/hyperv-live/run-*/compatibility.json
+          if-no-files-found: error

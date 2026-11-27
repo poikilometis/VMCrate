@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "listenAddress": "127.0.0.1",
+  "port": 7443,
+  "serverCertificateSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "queueDirectory": "queue",
+  "recipeCatalog": "recipes.json",
+  "accounts": [
+    {
+      "id": "alice",
+      "clientCertificateSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "workspace": "alice-workspace",
+      "recipes": [{ "id": "private-two-node", "pins": "alice-private-two-node.lock.json" }]
+    },
+    {
+      "id": "bob",
+      "clientCertificateSha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "workspace": "bob-workspace",
+      "recipes": [{ "id": "private-two-node", "pins": "bob-private-two-node.lock.json" }]
+    }
+  ]
+}

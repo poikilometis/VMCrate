@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/VMCrate.Desktop/VMCrate.Desktop.csproj" />
+    <ProjectReference Include="../../src/VMCrate.Host/VMCrate.Host.csproj" />
+  </ItemGroup>
+</Project>

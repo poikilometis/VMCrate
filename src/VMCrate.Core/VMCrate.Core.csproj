@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../locales/*.json" Link="Locales/%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="VMCrate.Tests" />
+    <EmbeddedResource Include="../../examples/recipes.json" LogicalName="VMCrate.Core.recipes.json" />
+    <EmbeddedResource Include="../../docs/operations.md" LogicalName="VMCrate.Core.operations.md" />
+    <EmbeddedResource Include="Media/ImageSources.json" LogicalName="VMCrate.Core.ImageSources.json" />
+    <EmbeddedResource Include="Guest/UpdateProxyProbe.sh" LogicalName="VMCrate.Core.UpdateProxyProbe.sh" />
+    <EmbeddedResource Include="Guest/LinuxInventory.sh" LogicalName="VMCrate.Core.LinuxInventory.sh" />
+  </ItemGroup>
+</Project>
