@@ -32,6 +32,9 @@ state.replaced.json
 app-updates/
 restore-drills/
 restore-checks/
+.dr/
+restore-drill.lock
+jobs/
 outbox/
 *.copying
 workspace-location.json

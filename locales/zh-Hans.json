@@ -607,5 +607,6 @@
   "error.appUpdate": "已验证的更新包或其凭据不可用。",
   "error.appUpdateChanged": "更新后工作区已发生变化，无法安全地用旧版目录覆盖当前状态。",
   "error.appUpdateGh": "请安装 GitHub CLI 并确保 gh.exe 可用，以验证发布来源。",
-  "error.appUpdateProvenance": "GitHub 无法验证此 ZIP 是否来自项目的发布工作流。"
+  "error.appUpdateProvenance": "GitHub 无法验证此 ZIP 是否来自项目的发布工作流。",
+  "error.drillPath": "Hyper-V 恢复测试需要更短的路径。请选择路径较短的本地工作区。"
 }

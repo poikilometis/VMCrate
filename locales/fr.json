@@ -607,5 +607,6 @@
   "error.appUpdate": "Le paquet vérifié ou son reçu est indisponible.",
   "error.appUpdateChanged": "L’espace de travail a changé depuis la mise à jour. Le catalogue précédent ne peut pas remplacer cet état en toute sécurité.",
   "error.appUpdateGh": "Installez GitHub CLI et rendez gh.exe accessible pour vérifier la provenance.",
-  "error.appUpdateProvenance": "GitHub n’a pas pu vérifier que ce ZIP provient du workflow de publication du projet."
+  "error.appUpdateProvenance": "GitHub n’a pas pu vérifier que ce ZIP provient du workflow de publication du projet.",
+  "error.drillPath": "Hyper-V exige un chemin plus court pour ce test. Choisissez un espace de travail local au chemin plus court."
 }

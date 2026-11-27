@@ -607,5 +607,6 @@
   "error.appUpdate": "検証済みの更新パッケージまたは検証記録が見つかりません。",
   "error.appUpdateChanged": "更新後に作業領域が変更されたため、以前のカタログで現在の状態を安全に置き換えることはできません。",
   "error.appUpdateGh": "リリースの出所を確認するには GitHub CLI をインストールし、gh.exe を利用できるようにしてください。",
-  "error.appUpdateProvenance": "この ZIP がプロジェクトのリリース用ワークフローで生成されたことを GitHub が確認できませんでした。"
+  "error.appUpdateProvenance": "この ZIP がプロジェクトのリリース用ワークフローで生成されたことを GitHub が確認できませんでした。",
+  "error.drillPath": "Hyper-V の復元テストには短いパスが必要です。より短いローカル作業領域のパスを選択してください。"
 }

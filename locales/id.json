@@ -607,5 +607,6 @@
   "error.appUpdate": "Paket pembaruan terverifikasi atau buktinya tidak tersedia.",
   "error.appUpdateChanged": "Ruang kerja berubah setelah pembaruan. Katalog lama tidak dapat menggantikan keadaan saat ini dengan aman.",
   "error.appUpdateGh": "Pasang GitHub CLI dan pastikan gh.exe tersedia untuk memverifikasi asal rilis.",
-  "error.appUpdateProvenance": "GitHub tidak dapat memastikan ZIP ini berasal dari alur rilis proyek."
+  "error.appUpdateProvenance": "GitHub tidak dapat memastikan ZIP ini berasal dari alur rilis proyek.",
+  "error.drillPath": "Hyper-V membutuhkan jalur ruang kerja yang lebih pendek untuk uji pemulihan. Pilih jalur lokal yang lebih pendek."
 }

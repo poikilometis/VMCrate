@@ -607,5 +607,6 @@
   "error.appUpdate": "حزمة التحديث التي تم التحقق منها أو سجلها غير متاح.",
   "error.appUpdateChanged": "تغيرت مساحة العمل بعد التحديث. لا يمكن للفهرس السابق استبدال الحالة الحالية بأمان.",
   "error.appUpdateGh": "ثبّت GitHub CLI وأتح gh.exe للتحقق من مصدر الإصدار.",
-  "error.appUpdateProvenance": "تعذّر على GitHub إثبات صدور ملف ZIP عن سير إصدار المشروع."
+  "error.appUpdateProvenance": "تعذّر على GitHub إثبات صدور ملف ZIP عن سير إصدار المشروع.",
+  "error.drillPath": "يتطلب اختبار الاستعادة في Hyper-V مساراً أقصر. اختر مساحة عمل محلية ذات مسار أقصر."
 }

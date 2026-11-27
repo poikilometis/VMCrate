@@ -607,5 +607,6 @@
   "error.appUpdate": "Das geprüfte Paket oder sein Nachweis ist nicht verfügbar.",
   "error.appUpdateChanged": "Der Arbeitsbereich hat sich geändert. Der vorherige Katalog kann den aktuellen Stand nicht sicher ersetzen.",
   "error.appUpdateGh": "Installieren Sie GitHub CLI und stellen Sie gh.exe zur Prüfung bereit.",
-  "error.appUpdateProvenance": "GitHub konnte die ZIP-Datei dem Release-Workflow nicht zuordnen."
+  "error.appUpdateProvenance": "GitHub konnte die ZIP-Datei dem Release-Workflow nicht zuordnen.",
+  "error.drillPath": "Hyper-V benötigt für den Wiederherstellungstest einen kürzeren Pfad. Wählen Sie einen kürzeren lokalen Arbeitsbereichspfad."
 }

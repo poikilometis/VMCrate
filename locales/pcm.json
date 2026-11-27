@@ -607,5 +607,6 @@
   "error.appUpdate": "Di verified update or record no dey available.",
   "error.appUpdateChanged": "Di workspace don change after update. Di old catalog no fit replace wetin dey now safely.",
   "error.appUpdateGh": "Install GitHub CLI and make gh.exe available to check where di release come from.",
-  "error.appUpdateProvenance": "GitHub no fit confirm say dis ZIP come from di project release workflow."
+  "error.appUpdateProvenance": "GitHub no fit confirm say dis ZIP come from di project release workflow.",
+  "error.drillPath": "Hyper-V need short path for restore test. Pick local workspace wey get shorter path."
 }

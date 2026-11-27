@@ -50,5 +50,11 @@ internal static class LabBackupChecks
         Expect(repeated.AlreadyRestored == 2 && repeated.RequiredBytes == 0, "Completed restore is not recognized.");
         await target.RestoreLabBackupAsync(manifest, repeated);
         Expect(host.Machines.Count == 2, "A repeat restore duplicated a VM.");
+
+        host.BootVerified = true;
+        var receipt = await target.TestLabBackupAsync(manifest);
+        Expect(receipt.Booted == 2 && target.ReadRestoreDrill(manifest) == receipt && host.Machines.Count == 2 &&
+            !Directory.Exists(Path.Combine(target.WorkspaceDirectory, RestoreDrillWorkspace.DirectoryName)),
+            "The Offline drill lost its receipt or left a temporary VM or workspace.");
     }
 }

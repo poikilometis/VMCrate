@@ -607,5 +607,6 @@
   "error.appUpdate": "The verified update package or its receipt is unavailable.",
   "error.appUpdateChanged": "The workspace changed after the update. The previous catalog cannot safely replace its current state.",
   "error.appUpdateGh": "Install GitHub CLI and make gh.exe available to verify release provenance.",
-  "error.appUpdateProvenance": "GitHub could not verify this ZIP against the project's release workflow."
+  "error.appUpdateProvenance": "GitHub could not verify this ZIP against the project's release workflow.",
+  "error.drillPath": "Hyper-V needs a shorter workspace path for the restore test. Choose a shorter local workspace."
 }

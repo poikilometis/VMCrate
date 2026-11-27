@@ -13,7 +13,7 @@ public static class FailureRouting
         "error.proxyDrift" or "error.proxyLease" or "error.updateAcl" or "error.updateEndpoint" or
             "status.proxyExpired" or "error.proxyResult" => RecoveryRoute.Proxy,
         "error.job" or "error.busy" => RecoveryRoute.Jobs,
-        "error.backupFormat" or "error.labChanged" => RecoveryRoute.Backup,
+        "error.backupFormat" or "error.labChanged" or "error.drillPath" => RecoveryRoute.Backup,
         "error.isoMismatch" or "error.imageSource" => RecoveryRoute.Images,
         "error.projectIntegrity" => RecoveryRoute.Revisions,
         _ => RecoveryRoute.Help

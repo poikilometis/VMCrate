@@ -53,7 +53,15 @@ public static class LocalPaths
     internal static void RemoveDirectory(string parent, Guid ownedId)
     {
         // The immediate child is always an application-generated ID, never an input path.
-        var owned = FullPath(Path.Combine(parent, ownedId.ToString("N")));
+        RemoveOwnedTree(Path.Combine(parent, ownedId.ToString("N")));
+    }
+
+    internal static void RemoveRestoreDrillDirectory(string workspace) =>
+        RemoveOwnedTree(Path.Combine(workspace, RestoreDrillWorkspace.DirectoryName));
+
+    private static void RemoveOwnedTree(string directory)
+    {
+        var owned = FullPath(directory);
         RequireOrdinaryPath(owned);
         if (!Directory.Exists(owned))
             return;

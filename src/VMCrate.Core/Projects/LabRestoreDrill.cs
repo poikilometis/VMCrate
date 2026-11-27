@@ -26,15 +26,13 @@ public sealed partial class LabService
         if (jobId is not null && ReadRestoreDrill(manifest) is { } earlier && earlier.JobId == jobId)
             return earlier;
         var started = Stopwatch.GetTimestamp();
-        var parent = Path.Combine(store.Root, "restore-drills");
-        var id = jobId ?? Guid.NewGuid();
-        var root = LocalPaths.MakeDirectory(Path.Combine(parent, id.ToString("N")));
-        var drill = new LabService(root, hypervisor, inboxWriter);
+        using var workspace = new RestoreDrillWorkspace(store.Root);
+        var drill = new LabService(workspace.Root, hypervisor, inboxWriter);
         LabBackupPreview preview;
         var booted = 0;
         try
         {
-            // Reclaim an interrupted drill by its exact workspace before replaying it.
+            // Reclaim the owned drill workspace before replaying interrupted work.
             await drill.CleanDrillAsync();
             cancellation.ThrowIfCancellationRequested();
             preview = drill.PlanDrillRestore(manifest);
@@ -55,7 +53,7 @@ public sealed partial class LabService
         finally
         {
             await drill.CleanDrillAsync();
-            LocalPaths.RemoveDirectory(parent, id);
+            workspace.Remove();
         }
 
         var receipt = new RestoreDrillReceipt(preview.Fingerprint, DateTimeOffset.UtcNow, booted, Elapsed(started), jobId);

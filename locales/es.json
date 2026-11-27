@@ -607,5 +607,6 @@
   "error.appUpdate": "El paquete verificado o su comprobante no está disponible.",
   "error.appUpdateChanged": "El espacio de trabajo cambió tras la actualización. El catálogo anterior no puede sustituir el estado actual de forma segura.",
   "error.appUpdateGh": "Instala GitHub CLI y asegúrate de que gh.exe esté disponible para verificar el origen.",
-  "error.appUpdateProvenance": "GitHub no pudo verificar que este ZIP proceda del flujo de publicación del proyecto."
+  "error.appUpdateProvenance": "GitHub no pudo verificar que este ZIP proceda del flujo de publicación del proyecto.",
+  "error.drillPath": "Hyper-V necesita una ruta más corta para la prueba de restauración. Elige un espacio de trabajo local con una ruta más corta."
 }

@@ -607,5 +607,6 @@
   "error.appUpdate": "O pacote verificado ou seu comprovante está indisponível.",
   "error.appUpdateChanged": "O espaço de trabalho mudou após a atualização. O catálogo anterior não pode substituir o estado atual com segurança.",
   "error.appUpdateGh": "Instale a GitHub CLI e disponibilize gh.exe para verificar a origem do lançamento.",
-  "error.appUpdateProvenance": "O GitHub não conseguiu verificar que este ZIP veio do fluxo de publicação do projeto."
+  "error.appUpdateProvenance": "O GitHub não conseguiu verificar que este ZIP veio do fluxo de publicação do projeto.",
+  "error.drillPath": "O Hyper-V precisa de um caminho mais curto para o teste de restauração. Escolha um espaço de trabalho local com caminho mais curto."
 }
