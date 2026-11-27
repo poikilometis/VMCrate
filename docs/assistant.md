@@ -14,6 +14,8 @@ The workflow displays the exact VMCrate request and chosen provider before submi
 
 Choose **Explain with AI** in proxy diagnostics or template build history. The explanation cites identifiers shown in the reviewed context. **Operation log** shows recent recorded operations. **Session report** shows file hashes and the sequence of operations for active and recently removed disposable VMs. The JSON export can include an AI explanation alongside the observations.
 
+For a build failure, open **Build diagnostics → Explain with AI**. The prompt includes the current and comparison observations if available, with route change, proxy status and timing recorded as typed facts. It omits IP addresses, adapter names and credentials. Open a cited reading in the assistant window and use the host or guest check in **Build diagnostics** to confirm the suggested cause.
+
 Choose **Lab from description**, describe the VMs and any shared Private segments, and review the returned blueprint. Open it in the editor to adjust names or resources before saving. Use **Preview** to review actual deployment before confirming.
 
 ## Check template updates

@@ -8,12 +8,13 @@ permissions:
 
 jobs:
   acceptance:
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == github.repository_owner }}
     runs-on: [self-hosted, Windows, X64, vmcrate-hyperv]
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       VMCRATE_TEST_FIXTURES: ${{ vars.VMCRATE_TEST_FIXTURES }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
       - name: Run acceptance against local fixtures

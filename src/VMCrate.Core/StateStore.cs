@@ -4,13 +4,14 @@ namespace VMCrate.Core;
 
 internal sealed record LabState(Guid WorkspaceId, int Version, List<Template> Templates, List<Machine> Machines)
 {
-    internal const int CurrentVersion = 7;
+    internal const int CurrentVersion = 9;
     public List<DiskRecoveryPoint> RecoveryPoints { get; init; } = [];
     public PendingDiskRestore? DiskRestore { get; set; }
     public List<OperationEntry> Operations { get; init; } = [];
     public List<AnalysisReport> ArchivedSessions { get; init; } = [];
     public List<PendingProvision> Provisions { get; init; } = [];
     public List<TemplateBuild> Builds { get; init; } = [];
+    public List<OutboxTransfer> Outboxes { get; init; } = [];
 }
 
 internal sealed partial class StateStore
@@ -56,7 +57,7 @@ internal sealed partial class StateStore
     {
         try
         {
-            using var input = File.OpenRead(path);
+            using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
             using var document = JsonDocument.Parse(input);
             var root = document.RootElement;
             if (root.ValueKind == JsonValueKind.Object && root.EnumerateObject().Any(property =>
@@ -67,7 +68,9 @@ internal sealed partial class StateStore
             var state = root.Deserialize<LabState>(JsonDefaults.Options);
             if (state is null || state.WorkspaceId == Guid.Empty || state.Version is < 1 ||
                 state.Templates is null || state.Machines is null || state.Builds is null ||
-                state.Builds.Any(build => build is null || build.Id == Guid.Empty || build.Options is null || build.History is null) ||
+                state.Builds.Any(build => build is null || build.Id == Guid.Empty || build.Options is null || build.History is null ||
+                    build.ProxyChecks is null || build.ProxyChecks.Length > BuildProxyObservation.HistoryLimit ||
+                    build.ProxyChecks.Any(check => check is null)) ||
                 state.Builds.Select(build => build.Id).Distinct().Count() != state.Builds.Count ||
                 state.Templates.Any(template => template is null || template.Id == Guid.Empty) ||
                 state.Machines.Any(machine => machine is null || machine.Id == Guid.Empty ||
@@ -86,7 +89,7 @@ internal sealed partial class StateStore
                 state.Operations.Any(item => item is null || item.Resource == Guid.Empty) ||
                 state.ArchivedSessions is null || state.ArchivedSessions.Count > 64 ||
                 state.ArchivedSessions.Any(report => report?.Machine is null || report.Files is null) ||
-                !RecoveryPointCatalog.Valid(state) ||
+                !RecoveryPointCatalog.Valid(state) || !OutboxTransfer.ValidCatalog(state.Outboxes) ||
                 state.Provisions is null ||
                 state.Provisions.Any(item => item is null || !state.Machines.Any(item.Matches)) ||
                 state.Provisions.Select(item => item.Id).Distinct().Count() != state.Provisions.Count)
@@ -142,5 +145,8 @@ internal sealed partial class StateStore
 
     internal MachineLocation Location(LabState state, Machine machine) =>
         new(machine, state.WorkspaceId, Path.Combine(Machines, machine.Id.ToString("N")),
-            machine.TemplateId is Guid templateId ? TemplateDisk(templateId) : null);
+            machine.TemplateId is Guid templateId ? TemplateDisk(templateId) : null,
+            state.Outboxes.SingleOrDefault(item => item.Attachment == machine.Id) is { } transfer ? OutboxDisk(transfer.Id) : null);
+
+    internal string OutboxDisk(Guid id) => Path.Combine(root, "outbox", id.ToString("N"), "output.vhdx");
 }

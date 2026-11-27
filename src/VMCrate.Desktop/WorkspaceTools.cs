@@ -11,6 +11,9 @@ public partial class WorkspaceWindow
 
     private async void OnFirstRun(object sender, RoutedEventArgs e) => await ShowWorkflowAsync(
         new FirstRunWindow(labels, preferences.Root, new PowerShellHypervisor().ReadHostReadinessAsync, null));
+    private async void OnFirstMachine(object sender, RoutedEventArgs e) => await ShowFirstMachineAsync();
+    private Task ShowFirstMachineAsync() => ShowWorkflowAsync(
+        new FirstMachineWindow(labels, lab, preferences.Root, new PowerShellHypervisor().ReadHostReadinessAsync));
 
     private async void OnTroubleshooting(object sender, RoutedEventArgs e) =>
         await ShowWorkflowAsync(new TroubleshootingWindow(labels, lab));
@@ -40,6 +43,8 @@ public partial class WorkspaceWindow
     private async void OnDiagnostics(object sender, RoutedEventArgs e) => await ShowWorkflowAsync(new HostDiagnosticsWindow(labels, lab));
     private async void OnBuilds(object sender, RoutedEventArgs e) => await ShowWorkflowAsync(new TemplateBuildWindow(labels, lab));
     private async void OnLabs(object sender, RoutedEventArgs e) => await ShowWorkflowAsync(new LabGroupWindow(labels, lab));
+    private async void OnLabBackup(object sender, RoutedEventArgs e) => await ShowWorkflowAsync(
+        new LabBackupWindow(labels, lab, snapshot?.Machines ?? []));
     private async void OnStorage(object sender, RoutedEventArgs e) => await ShowWorkflowAsync(new StorageWindow(labels, lab));
     private async void OnCleanSession(object sender, RoutedEventArgs e) => await ShowWorkflowAsync(new CleanSessionWindow(labels, lab, preferences.Root));
 

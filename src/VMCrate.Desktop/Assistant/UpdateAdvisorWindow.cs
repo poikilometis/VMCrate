@@ -13,7 +13,7 @@ internal sealed class UpdateAdvisorWindow : WorkflowWindow
     private readonly Button explain, save, revisions, collect;
     private UpdateAdvice? advice;
 
-    internal UpdateAdvisorWindow(Labels text, LabService lab, IReadOnlyList<Template> available)
+    internal UpdateAdvisorWindow(Labels text, LabService lab, IReadOnlyList<Template> available, Guid? trial = null)
         : base(text, "tools.advisor", 820, 620)
     {
         this.lab = lab;
@@ -22,7 +22,8 @@ internal sealed class UpdateAdvisorWindow : WorkflowWindow
         templates.SelectedIndex = available.Count > 0 ? 0 : -1;
         var toolbar = Actions();
         Action(toolbar, "advisor.check", CheckAsync, true).IsEnabled = available.Count != 0;
-        Action(toolbar, "inventory.compare", CompareAsync);
+        Action(toolbar, "inventory.compare", () => CompareAsync(advisories: false));
+        Action(toolbar, "inventory.compareAdvisories", () => CompareAsync(advisories: true));
         explain = Action(toolbar, "ai.explain", ExplainAsync);
         save = Action(toolbar, "action.save", SaveAsync);
         revisions = Action(toolbar, "tools.revisions", ShowRevisionsAsync);
@@ -31,8 +32,8 @@ internal sealed class UpdateAdvisorWindow : WorkflowWindow
             if (templates.SelectedItem is Template template)
             {
                 WorkflowWindow dialog = template.Guest == GuestFamily.Windows
-                    ? new WindowsInventoryWindow(Text, lab, template)
-                    : new LinuxInventoryWindow(Text, lab, template);
+                    ? new WindowsInventoryWindow(Text, lab, template, trial)
+                    : new LinuxInventoryWindow(Text, lab, template, trial);
                 dialog.Owner = this;
                 dialog.ShowDialog();
             }
@@ -80,15 +81,49 @@ internal sealed class UpdateAdvisorWindow : WorkflowWindow
         });
     }
 
-    private async Task CompareAsync()
+    private async Task CompareAsync(bool advisories)
     {
         if (SelectFile("inventory.before", "JSON (*.json)|*.json") is not { } before ||
             SelectFile("inventory.after", "JSON (*.json)|*.json") is not { } after)
             return;
-        var changes = await Task.Run(() => InventoryComparison.Compare(PackageInventory.Read(before), PackageInventory.Read(after)));
-        new ReportComparisonWindow(Text, changes.Select(item => new ReportChange(item.Name,
-            string.Join(", ", item.Before), string.Join(", ", item.After))).ToArray(), "inventory.compare")
+        var inventories = await Task.Run(() => (Before: PackageInventory.Read(before), After: PackageInventory.Read(after)));
+        var changes = InventoryComparison.Compare(inventories.Before, inventories.After)
+            .Select(item => new ReportChange(item.Name, string.Join(", ", item.Before), string.Join(", ", item.After))).ToList();
+        if (advisories)
+        {
+            if (!inventories.Before.SupportsOsv || !inventories.After.SupportsOsv)
+                throw new LabException("inventory.localHint");
+            if (!Text.Confirm(this, "advisor.confirm", inventories.Before.Packages.Length + inventories.After.Packages.Length,
+                inventories.Before.Ecosystem))
+                return;
+            await WithCancellationAsync(async token =>
+            {
+                var client = new AdvisoryClient();
+                var previous = await client.CheckAsync(inventories.Before, token);
+                var current = await client.CheckAsync(inventories.After, token);
+                changes.AddRange(CompareAdvisoryMatches(previous, current));
+                ShowComparison(changes, "inventory.compareAdvisories");
+            });
+            return;
+        }
+        ShowComparison(changes, "inventory.compare");
+    }
+
+    private void ShowComparison(IReadOnlyList<ReportChange> changes, string title) =>
+        new ReportComparisonWindow(Text, changes, title)
             { Owner = this }.ShowDialog();
+
+    private static IEnumerable<ReportChange> CompareAdvisoryMatches(UpdateAdvice before, UpdateAdvice after)
+    {
+        static Dictionary<(string Package, string Advisory), string> Matches(UpdateAdvice advice) => advice.Findings
+            .GroupBy(item => (item.Package, item.Advisory))
+            .ToDictionary(group => group.Key, group => string.Join(", ", group.Select(item => item.Installed).Distinct().Order()));
+
+        var previous = Matches(before);
+        var current = Matches(after);
+        return previous.Keys.Union(current.Keys).OrderBy(item => item.Package).ThenBy(item => item.Advisory)
+            .Select(key => new ReportChange($"{key.Package} · {key.Advisory}", previous.GetValueOrDefault(key, ""),
+                current.GetValueOrDefault(key, ""))).Where(change => change.Before != change.After);
     }
 
     private Task ExplainAsync()

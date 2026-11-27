@@ -10,10 +10,12 @@ function New-CrateMachine($Request, [switch]$Prepared) {
     }
 
     if ($Prepared) {
-        if ($location.baseDisk -or $Request.installerIso -or $location.machine.disposable -or $location.machine.network -ne 'Offline') {
+        if ($Request.installerIso -or $location.machine.disposable -or $location.machine.network -notin @('Offline', 'Private') -or
+            ($location.machine.network -eq 'Private' -and (-not $location.baseDisk -or -not $location.machine.privateSegment))) {
             throw 'error.transferState'
         }
-        Assert-CrateBaseDisk $Request.disk
+        if ($location.baseDisk) { Assert-CratePreparedChild $Request.disk $location.baseDisk }
+        else { Assert-CrateBaseDisk $Request.disk }
     } elseif ($location.baseDisk) {
         Assert-CratePath $location.baseDisk
         New-VHD -Path $Request.disk -ParentPath $location.baseDisk -Differencing | Out-Null
@@ -130,7 +132,7 @@ function Invoke-CrateMachineAction([string]$Action, $Request) {
     $location = $Request.location
     $vm = Find-CrateVm $location @(Get-VM)
     if ($null -eq $vm) {
-        if ($Action -eq 'Delete') { return $true }
+        if ($Action -in @('Delete', 'DetachOutbox')) { return $true }
         throw 'error.machine'
     }
     switch ($Action) {
@@ -150,6 +152,10 @@ function Invoke-CrateMachineAction([string]$Action, $Request) {
             if (@(Get-CrateFindings $vm $location).Count) { throw 'error.isolation' }
             Start-VM -VM $vm | Out-Null
         }
+        'Shutdown' {
+            if ($vm.State -ne 'Running' -or @(Get-CrateFindings $vm $location).Count) { throw 'error.guestRestart' }
+            Stop-VM -VM $vm -Confirm:$false | Out-Null
+        }
         'PowerOff' {
             if ([string]$vm.State -eq 'Saved') {
                 Remove-VMSavedState -VM $vm -Confirm:$false
@@ -164,10 +170,13 @@ function Invoke-CrateMachineAction([string]$Action, $Request) {
         }
         'SetNetwork' { Set-CrateNetwork $vm $location }
         'CloseExpiredUpdate' { Close-CrateExpiredUpdate $vm $location }
+        'CloseDriftedUpdate' { Close-CrateDriftedUpdate $vm $location }
         'SetInbox' { Set-CrateInbox $vm $location $Request.isoPath }
         'EjectInstaller' { Remove-CrateInstaller $vm }
         'ArmInstallerSeed' { Set-CrateInstallerSeed $vm $location $Request.isoPath }
         'Console' { return $vm.Name }
+        'AttachOutbox' { Add-CrateOutbox $vm $location $Request.createBytes }
+        'DetachOutbox' { Remove-CrateOutbox $vm $location }
     }
     $true
 }

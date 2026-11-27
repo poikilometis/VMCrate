@@ -6,7 +6,7 @@ namespace VMCrate.Desktop;
 
 internal sealed class WindowsInventoryWindow : WorkflowWindow
 {
-    internal WindowsInventoryWindow(Labels text, LabService lab, Template template) : base(text, "inventory.collect", 640, 530)
+    internal WindowsInventoryWindow(Labels text, LabService lab, Template template, Guid? trial = null) : base(text, "inventory.collect", 640, 530)
     {
         Note(template.Name);
         Note(Text["inventory.windowsHint"]);
@@ -32,7 +32,7 @@ internal sealed class WindowsInventoryWindow : WorkflowWindow
         Loaded += async (_, _) => await RunAsync(async () =>
         {
             var snapshot = await Task.Run(lab.ObserveAsync);
-            machines.ItemsSource = snapshot.Machines.Where(vm => vm.TemplateId == template.Id &&
+            machines.ItemsSource = snapshot.Machines.Where(vm => (vm.TemplateId == template.Id || vm.Id == trial) &&
                 !vm.Disposable && vm.Network == NetworkMode.Offline && snapshot.StateOf(vm.Id) == PowerState.Running).ToArray();
             machines.SelectedIndex = machines.Items.Count == 0 ? -1 : 0;
         });

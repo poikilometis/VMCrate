@@ -12,7 +12,9 @@ internal sealed class CleanSessionWindow : WorkflowWindow
     private readonly ComboBox templates, sessions;
     private readonly TextBox name, memory, cpu;
     private readonly TextBlock filesLabel, details;
-    private readonly Button prepare, start, console, report, end;
+    private readonly Button prepare, start, console, report, end, shutdown, disconnect;
+    private readonly CheckBox keep;
+    private readonly Dictionary<Guid, string> exported = [];
     private IReadOnlyList<string> files = [];
     private LabSnapshot? snapshot;
 
@@ -25,6 +27,8 @@ internal sealed class CleanSessionWindow : WorkflowWindow
         name = Field("label.name", new TextBox { MaxLength = 64 });
         memory = Field("label.memory", new TextBox { Text = "4" });
         cpu = Field("label.cpu", new TextBox { Text = "2" });
+        keep = new CheckBox { Content = Text["session.keep"], Margin = new Thickness(0, 6, 0, 10) };
+        Body.Children.Add(keep);
         Action(Actions(), "profiles.title", () => OpenProfilesAsync(workspace));
         filesLabel = Note("");
         SetFiles(initialFiles ?? []);
@@ -32,13 +36,22 @@ internal sealed class CleanSessionWindow : WorkflowWindow
         Action(creation, "report.addFiles", SelectFilesAsync);
         Action(creation, "report.clearFiles", () => { SetFiles([]); return Task.CompletedTask; });
         prepare = Action(creation, "action.disposable", PrepareAsync, true);
+        keep.Checked += (_, _) => prepare.Content = Text["action.clone"];
+        keep.Unchecked += (_, _) => prepare.Content = Text["action.disposable"];
 
         sessions = Field("tools.session", new ComboBox { DisplayMemberPath = "Name" });
         details = Note("");
         var lifecycle = Actions();
         start = Action(lifecycle, "action.start", () => OperateAsync(lab.StartAsync));
         console = Action(lifecycle, "action.console", ConsoleAsync);
+        disconnect = Action(lifecycle, "session.closeConsole", () => OperateAsync(lab.CloseConsoleAsync));
+        shutdown = Action(lifecycle, "session.shutdown", ShutdownAsync);
         report = Action(lifecycle, "action.vmReport", ReportAsync);
+        Action(lifecycle, "outbox.title", () =>
+        {
+            new OutboxWindow(Text, lab, (sessions.SelectedItem as Machine)?.Id) { Owner = this }.ShowDialog();
+            return RefreshAsync();
+        });
         Action(lifecycle, "tools.sessionReport", () =>
         {
             new SessionReportWindow(Text, lab, (sessions.SelectedItem as Machine)?.Id) { Owner = this }.ShowDialog();
@@ -75,7 +88,7 @@ internal sealed class CleanSessionWindow : WorkflowWindow
         templates.ItemsSource = snapshot.Templates;
         templates.SelectedItem = snapshot.Templates.FirstOrDefault(item => item.Id == previousTemplate)
             ?? snapshot.Templates.FirstOrDefault();
-        var active = snapshot.Machines.Where(vm => vm.Disposable).ToArray();
+        var active = snapshot.Machines.Where(vm => vm.Disposable || vm.SessionFiles is not null && vm.TemplateId is not null).ToArray();
         sessions.ItemsSource = active;
         sessions.SelectedItem = active.FirstOrDefault(vm => vm.Id == previousSession) ?? active.FirstOrDefault();
         Render();
@@ -85,12 +98,24 @@ internal sealed class CleanSessionWindow : WorkflowWindow
     {
         var vm = sessions.SelectedItem as Machine;
         var state = vm is null ? PowerState.Missing : snapshot!.StateOf(vm.Id);
-        details.Text = vm is null ? "" : Text["power." + state];
+        details.Text = vm is null ? "" : SessionDetail(vm, state);
         prepare.IsEnabled = snapshot?.Host is not null && templates.Items.Count > 0;
         start.IsEnabled = state == PowerState.Off && vm?.SessionStarted == false;
         console.IsEnabled = state == PowerState.Running;
-        end.IsEnabled = state is PowerState.Running or PowerState.Off or PowerState.Saved;
+        disconnect.IsEnabled = console.IsEnabled;
+        shutdown.IsEnabled = vm is { Disposable: false } && state == PowerState.Running;
+        end.IsEnabled = vm is { Disposable: true } && state is PowerState.Running or PowerState.Off or PowerState.Saved;
         report.IsEnabled = vm is not null;
+    }
+
+    private string SessionDetail(Machine vm, PowerState state)
+    {
+        var template = snapshot?.Templates.FirstOrDefault(item => item.Id == vm.TemplateId);
+        var revision = template is null ? "" : $" · {template.Name} {template.Revision}".TrimEnd();
+        var reportPath = exported.GetValueOrDefault(vm.Id);
+        return Text["power." + state] + revision + Environment.NewLine +
+               Text[vm.Disposable ? "session.discard" : "session.persist"] + Environment.NewLine +
+               (reportPath is null ? Text["session.noReport"] : Text.Format("session.reportAt", reportPath));
     }
 
     private Task SelectFilesAsync()
@@ -136,7 +161,8 @@ internal sealed class CleanSessionWindow : WorkflowWindow
         {
             var options = new MachineOptions(name.Text, Integer(memory.Text), Integer(cpu.Text));
             var selected = files;
-            var id = await Task.Run(() => lab.PrepareCleanSessionAsync(template.Id, options, selected));
+            var disposable = keep.IsChecked != true;
+            var id = await Task.Run(() => lab.PrepareCleanSessionAsync(template.Id, options, selected, disposable));
             await RefreshAsync(id);
             SetFiles([]);
         }
@@ -145,8 +171,13 @@ internal sealed class CleanSessionWindow : WorkflowWindow
     private Task ConsoleAsync() => snapshot?.Host?.EnhancedSession != true || Text.Confirm(this, "confirm.console")
         ? OperateAsync(lab.OpenConsoleAsync) : Task.CompletedTask;
 
-    private Task EndAsync() => sessions.SelectedItem is Machine vm && Text.Confirm(this, "confirm.endSession", vm.Name)
-        ? OperateAsync(lab.EndDisposableAsync) : Task.CompletedTask;
+    private Task EndAsync() => sessions.SelectedItem is Machine { Disposable: true } vm &&
+        Text.Confirm(this, "session.confirmDelete", vm.Name, exported.GetValueOrDefault(vm.Id) ?? Text["session.noReport"])
+            ? OperateAsync(lab.EndDisposableAsync) : Task.CompletedTask;
+
+    private Task ShutdownAsync() => sessions.SelectedItem is Machine { Disposable: false } vm &&
+        Text.Confirm(this, "session.confirmShutdown", vm.Name)
+            ? OperateAsync(lab.ShutDownAsync) : Task.CompletedTask;
 
     private async Task ReportAsync()
     {
@@ -154,7 +185,11 @@ internal sealed class CleanSessionWindow : WorkflowWindow
             return;
         var path = SaveFile("tools.report", $"vmcrate-report-{DateTime.UtcNow:yyyyMMdd-HHmmss}.json");
         if (path is not null)
+        {
             await Task.Run(() => lab.ExportReportAsync(path, vm.Id, []));
+            exported[vm.Id] = path;
+            Render();
+        }
     }
 
     private async Task OperateAsync(Func<Guid, Task> action)

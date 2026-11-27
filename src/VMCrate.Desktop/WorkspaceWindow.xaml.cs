@@ -12,21 +12,27 @@ public partial class WorkspaceWindow : Window
     private readonly Labels labels;
     private readonly Preferences preferences;
     private readonly SessionLaunch? launch;
+    private readonly bool showFirstMachine;
+    private readonly ReleaseUpdate? appUpdate;
     private readonly DispatcherTimer sessions = new() { Interval = TimeSpan.FromSeconds(15) };
     private LabSnapshot? snapshot;
     private bool busy;
     private bool workflowOpen;
     private string? status;
     private LabException? catalogIssue;
+    private (string Code, Guid? Id)? lastFailure;
     private Machine? SelectedMachine => (MachineList.SelectedItem as LabRow)?.Item as Machine;
     private VMCrate.Core.Template? SelectedTemplate => (TemplateList.SelectedItem as LabRow)?.Item as VMCrate.Core.Template;
 
-    internal WorkspaceWindow(LabService lab, Labels labels, Preferences preferences, SessionLaunch? launch = null)
+    internal WorkspaceWindow(LabService lab, Labels labels, Preferences preferences, SessionLaunch? launch = null,
+        bool showFirstMachine = false, ReleaseUpdate? appUpdate = null)
     {
         this.lab = lab;
         this.labels = labels;
         this.preferences = preferences;
         this.launch = launch;
+        this.showFirstMachine = showFirstMachine;
+        this.appUpdate = appUpdate;
         InitializeComponent();
         DataContext = labels;
         labels.Apply(this);
@@ -45,7 +51,11 @@ public partial class WorkspaceWindow : Window
         await RunAsync();
         sessions.Start();
         if (launch is null)
+        {
+            if (showFirstMachine && snapshot is { Machines.Count: 0 })
+                await ShowFirstMachineAsync();
             return;
+        }
 
         try
         {
@@ -96,14 +106,17 @@ public partial class WorkspaceWindow : Window
     private void OnMachineChanged(object sender, SelectionChangedEventArgs e) => RenderMachine();
     private void OnTemplateChanged(object sender, SelectionChangedEventArgs e) => RenderTemplate();
 
-    private async Task RunAsync(Func<Task>? action = null, bool automatic = false, string successStatus = "status.done")
+    private async Task RunAsync(Func<Task>? action = null, bool automatic = false, string successStatus = "status.done", Guid? resource = null)
     {
         if (busy)
             return;
 
         busy = true;
         if (!automatic)
+        {
+            lastFailure = null;
             SetStatus("status.working");
+        }
         SetBusyControls();
         try
         {
@@ -115,6 +128,7 @@ public partial class WorkspaceWindow : Window
         catch (Exception error)
         {
             status = "status.error";
+            lastFailure = (error is LabException failure ? failure.Key : "error.operation", resource);
             labels.ShowError(this, error);
         }
 
@@ -128,6 +142,11 @@ public partial class WorkspaceWindow : Window
             snapshot = null;
             catalogIssue = error;
             status = error.Key;
+        }
+        catch (LabException error) when (error.Key == "error.busy")
+        {
+            status = error.Key;
+            lastFailure = (error.Key, resource);
         }
         catch (Exception error)
         {

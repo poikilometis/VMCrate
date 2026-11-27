@@ -21,6 +21,8 @@ The workspace holds `state.json`, `templates/<id>/base.vhdx`, and `machines/<id>
 
 Creation records VM ownership before touching Hyper-V. Recovery rechecks ownership and registration before continuing a pending create. A fully configured VM is acknowledged with its disk intact. A retry that still needs to create a VM allocates a new disk and lists the prior one for review. Disk reset changes the drive attachment to a new differencing disk before attempting to delete the old disk. Unmounted artifacts left after a failed operation are collected during VM removal. Capturing a template copies and validates the standalone VHDX before recording it. Cold transfer uses a detached VHDX copy with a SHA-256 manifest, then uses the provisioning journal to re-register the installed guest as a new Offline VM.
 
+Schema 8 records build proxy observations and preferred template revisions. It extends prepared-disk recovery to restored lab VMs with verified parent disks. Lab restore checks the entire backup before provisioning. It rebinds each verified working disk to its copied parent and journals registration before touching Hyper-V. The manifest fingerprint and source VM ID identify a retry. The destination workspace scopes the recreated private segments.
+
 VMs created individually share a private switch per data directory when configured to use private networking. Blueprint switches are scoped to the workspace, blueprint and named network segment. The adapter verifies the type and ownership marker of each switch before using it. You can remove unused switches in Hyper-V Manager after removing or disconnecting their VMs.
 
 ## Blueprint and session lifecycle

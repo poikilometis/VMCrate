@@ -25,6 +25,7 @@ public sealed partial class PowerShellHypervisor
         string password, string proxyUser, string proxyPassword) =>
         InvokeAsync<ProxyGuestTrace>("CheckGuestProxy", new
         {
-            location, repository = options.Repository.AbsoluteUri, options.RelayPort, user, password, proxyUser, proxyPassword
+            location, repository = options.Repository.AbsoluteUri, options.RelayPort, user, password, proxyUser, proxyPassword,
+            options.MeasureDownload, sampleLimit = ProxyGuestTrace.SampleLimit
         });
 }

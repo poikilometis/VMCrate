@@ -32,6 +32,7 @@ public partial class WorkspaceWindow
         EmptyTemplates.Visibility = templates.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         RenderMachine();
         RenderTemplate();
+        RenderOverview();
         SetStatus(status);
         SetBusyControls();
     }

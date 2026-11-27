@@ -65,7 +65,10 @@ function Get-VHD($Path) {
     }
     [pscustomobject]@{ VhdFormat = 'VHDX'; VhdType = 'Differencing'; ParentPath = $script:baseDisk; Attached = $false; Size = 16MB }
 }
-function Set-VHD($Path, $ParentPath) {
+function Set-VHD {
+    [CmdletBinding(SupportsShouldProcess)]
+    param($Path, $ParentPath, [switch]$IgnoreIdMismatch)
+    Assert-Check (-not $IgnoreIdMismatch) 'A copied disk was rebound without checking its parent identity.'
     Assert-Check ($ParentPath -eq $script:baseDisk -and [IO.File]::Exists($Path)) 'Temporary disk parent changed.'
 }
 function Convert-VHD {
@@ -82,6 +85,12 @@ function Set-VMHardDiskDrive($VMHardDiskDrive, $Path) {
     $VMHardDiskDrive.Path = $Path
 }
 function Start-VM($Vm) { $script:startCalls++ }
+function Stop-VM {
+    [CmdletBinding(SupportsShouldProcess)]
+    param($Vm, [switch]$TurnOff, [switch]$Force)
+    Assert-Check (-not $TurnOff -and -not $Force) 'Guest shutdown attempted a hard power-off.'
+    $Vm.State = 'Off'
+}
 function Connect-VMNetworkAdapter($VMNetworkAdapter, $VMSwitch) {
     $VMNetworkAdapter.SwitchName = $VMSwitch.Name
     $VMNetworkAdapter.SwitchId = $VMSwitch.Id
@@ -208,6 +217,9 @@ try {
     $script:fixtureServices[1].Enabled = $false
     $script:fixtureVm.State = 'Running'
     Assert-Error 'error.off' { Set-CrateNetwork $script:fixtureVm $location }
+    $null = Invoke-CrateMachineAction 'Shutdown' $request
+    Assert-Check ($script:fixtureVm.State -eq 'Off') 'Guest shutdown did not finish.'
+    Write-Output 'PASS graceful shutdown invokes guest integration'
     $script:fixtureVm.State = 'Off'
     Write-Output 'PASS start checks guest integration and network changes require power off'
 
@@ -229,13 +241,14 @@ try {
     $script:fixtureVm.State = 'Running'
     function Invoke-Command($VMId, $Credential, $ArgumentList, [scriptblock]$ScriptBlock) {
         Assert-Check ($ArgumentList[0] -eq '8.8.4.4' -and $ArgumentList[2] -eq 2080) 'Incorrect guest probe inputs.'
-        @{ route = 1; gateway = 2; proxyTcp = 2; relayTcp = 1; connect = 502; http = 0; curlExit = 56 }
+        Assert-Check (-not $ArgumentList[6] -and $ArgumentList[7] -eq 262144) 'Incorrect sample settings.'
+        @{ route = 1; gateway = 2; proxyTcp = 2; relayTcp = 1; connect = 502; http = 0; curlExit = 56; downloadBytes = 0; elapsedMs = 614 }
     }
     $trace = Get-CrateGuestProxy $script:fixtureVm ([pscustomobject]@{
         location = $location; user = 'fixture'; password = 'fixture'; relayPort = 2080
-        repository = 'https://catalog.update.microsoft.com/'; proxyUser = ''; proxyPassword = ''
+        repository = 'https://catalog.update.microsoft.com/'; proxyUser = ''; proxyPassword = ''; measureDownload = $false; sampleLimit = 262144
     })
-    Assert-Check ($trace.gateway -eq 'Failed' -and $trace.connect -eq 502 -and $trace.http -eq 0) 'Guest diagnostics lost layer results.'
+    Assert-Check ($trace.gateway -eq 'Failed' -and $trace.connect -eq 502 -and $trace.http -eq 0 -and $trace.elapsedMs -eq 614) 'Guest diagnostics lost layer results.'
     $script:fixtureVm.State = 'Off'
     Write-Output 'PASS guest proxy diagnostics preserve route and CONNECT observations'
     $lease = $location.machine.proxy

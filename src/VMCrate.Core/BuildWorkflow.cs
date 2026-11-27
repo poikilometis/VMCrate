@@ -13,12 +13,31 @@ public sealed partial class LabService
         await ContinueBuildAsync(state, build, progress, cancellation);
     }
 
+    internal async Task ContinueQueuedBuildAsync(Guid id, BuildStage requested, IProgress<FileProgress> progress,
+        CancellationToken cancellation)
+    {
+        using var workspaceLock = store.Lock();
+        var state = store.Load();
+        var build = state.Builds.SingleOrDefault(item => item.Id == id) ?? throw new LabException("error.build");
+        if (build.Stage == requested)
+            await ContinueBuildAsync(state, build, progress, cancellation);
+    }
+
     private async Task ContinueBuildAsync(LabState state, TemplateBuild build, IProgress<FileProgress>? progress,
         CancellationToken cancellation)
     {
         var started = Stopwatch.GetTimestamp();
         try
         {
+            cancellation.ThrowIfCancellationRequested();
+            if (build.Stage is BuildStage.Install or BuildStage.Capture &&
+                state.Machines.SingleOrDefault(machine => machine.Id == build.Id) is { } builder)
+            {
+                if (await CloseOnRouteDriftAsync(state, builder))
+                    throw new LabException("error.proxyDrift");
+                await ObserveBuildProxyAsync(state, builder, BuildProxySource.Continue);
+                build = state.Builds.Single(item => item.Id == build.Id);
+            }
             cancellation.ThrowIfCancellationRequested();
             var next = await AdvanceBuildAsync(state, build, progress, cancellation);
             if (next != build.Stage)
@@ -45,7 +64,10 @@ public sealed partial class LabService
                 await VerifyBuildMediaAsync(build, progress, cancellation);
                 return BuildStage.Provision;
             case BuildStage.Provision:
-                await ProvisionBuilderAsync(state, build, cancellation);
+                if (build.Options.RevisionTrial)
+                    await ProvisionTrialBuilderAsync(state, build, progress, cancellation);
+                else
+                    await ProvisionBuilderAsync(state, build, cancellation);
                 return BuildStage.Install;
             case BuildStage.Install:
                 if (!await hypervisor.CheckBootAsync(store.Location(state, FindMachine(state, build.Id))))
@@ -103,7 +125,8 @@ public sealed partial class LabService
         await hypervisor.SetInboxAsync(location, null);
         await StoreTemplateAsync(state, job.Options.Name, builder.Guest, builder.SecureBoot, source,
             job.Id, job.Options.Revision, job.Options.Lineage, progress, cancellation,
-            job.Options.Media ?? new MediaProvenance(MediaVerification.LocalSha256, VerifiedUtc: DateTimeOffset.UtcNow),
+            job.Options.Media ?? (job.Options.RevisionTrial ? null :
+                new MediaProvenance(MediaVerification.LocalSha256, VerifiedUtc: DateTimeOffset.UtcNow)),
             published: !job.Options.VerifyCloneOnPublish);
     }
 

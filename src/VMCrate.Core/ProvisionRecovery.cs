@@ -9,7 +9,8 @@ internal sealed record PendingProvision(Guid Id, string? Iso, int DiskGiB, Prepa
         if (Id != machine.Id)
             return false;
         if (Prepared is { } disk)
-            return machine is { TransferId: not null, TemplateId: null, Network: NetworkMode.Offline, Disposable: false } &&
+            return machine is { TransferId: not null, Disposable: false } &&
+                (machine.Network == NetworkMode.Offline || machine is { Network: NetworkMode.Private, TemplateId: not null, PrivateSegment: not null }) &&
                 Iso is null && DiskGiB == 0 && disk.FileId != Guid.Empty &&
                 disk.Bytes is > 0 and <= MachineTransfer.MaxBytes &&
                 disk.Sha256 is { Length: 64 } && disk.Sha256.All(char.IsAsciiHexDigit);
@@ -22,6 +23,46 @@ internal sealed record PendingProvision(Guid Id, string? Iso, int DiskGiB, Prepa
 
 public sealed partial class LabService
 {
+    private async Task ProvisionPreparedDiskAsync(LabState state, Machine machine, string source, string hash, long bytes,
+        IProgress<FileProgress>? progress, CancellationToken cancellation)
+    {
+        var location = store.Location(state, machine);
+        if (bytes is <= 0 or > MachineTransfer.MaxBytes || new FileInfo(source).Length != bytes)
+            throw new LabException("error.projectIntegrity");
+        WorkspaceCapacity.RequireSpace(store.Root, bytes);
+        var fileId = Guid.NewGuid();
+        var disk = Path.Combine(location.DiskDirectory, $"{fileId:N}.vhdx");
+        PendingProvision operation;
+        try
+        {
+            LocalPaths.MakeDirectory(location.DiskDirectory);
+            var actual = await FileDigests.CopyAndHashAsync(source, disk, progress, cancellation);
+            if (!actual.Equals(hash, StringComparison.OrdinalIgnoreCase) || new FileInfo(disk).Length != bytes)
+                throw new LabException("error.projectIntegrity");
+            if (location.BaseDisk is { } parent)
+            {
+                await hypervisor.BindDiskParentAsync(disk, parent);
+                var evidence = await FileDigests.InspectAsync(disk, cancellation);
+                (actual, bytes) = (evidence.Sha256, evidence.SizeBytes);
+            }
+            else
+                await hypervisor.ValidateBaseDiskAsync(disk);
+
+            cancellation.ThrowIfCancellationRequested();
+            operation = new PendingProvision(machine.Id, null, 0, new(fileId, actual, bytes));
+            state.Machines.Add(machine);
+            state.Provisions.Add(operation);
+            store.Save(state);
+        }
+        catch
+        {
+            File.Delete(disk);
+            throw;
+        }
+
+        await FinishProvisionAsync(state, location, operation);
+    }
+
     private async Task ProvisionMachineAsync(LabState state, Machine machine, string? iso, int diskGiB, bool record = true)
     {
         var location = store.Location(state, machine);

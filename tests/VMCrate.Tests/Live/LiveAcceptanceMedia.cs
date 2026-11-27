@@ -19,6 +19,11 @@ internal static partial class LiveAcceptance
                 "fixture", "Fixture-local_9284!");
             var job = workspace.Lab.QueueBuild(new TemplateBuildOptions($"Acceptance {family}", null, installer, media.Sha256,
                 seed, BootSeedHash: seedHash));
+            using var interrupted = new CancellationTokenSource();
+            try { await workspace.Lab.ContinueBuildAsync(job.Id, new InterruptCopy(interrupted), interrupted.Token); }
+            catch (OperationCanceledException) when (interrupted.IsCancellationRequested) { }
+            Expect(workspace.Lab.ReadBuilds().Single(item => item.Id == job.Id).Stage == BuildStage.Verify &&
+                File.Exists(Path.Combine(workspace.Store.Media, $"{job.Id:N}.copying")), "Interrupted ISO copy was not retained.");
             await workspace.Lab.ContinueBuildAsync(job.Id);
             workspace.Reopen();
             Expect(workspace.Lab.ReadBuilds().Single(item => item.Id == job.Id).Stage == BuildStage.Provision,
@@ -50,6 +55,15 @@ internal static partial class LiveAcceptance
         var saved = Directory.GetFiles(workspace.Root, "state.failed-*.json").Single();
         Expect(File.ReadAllText(saved) == "{acceptance-fixture", "The damaged test catalog was not preserved.");
         Console.WriteLine("PASS Previous catalog restored in the isolated test workspace");
+    }
+
+    private sealed class InterruptCopy(CancellationTokenSource cancellation) : IProgress<FileProgress>
+    {
+        public void Report(FileProgress progress)
+        {
+            if (progress.ProcessedBytes > 0)
+                cancellation.Cancel();
+        }
     }
 
     private static async Task PublisherResumeAsync(LiveWorkspace workspace, MediaFixture linux)

@@ -26,4 +26,28 @@ public static class DiagnosticFacts
             $"{entry.TimeUtc:u} stage={entry.Stage}; result={entry.ErrorKey ?? "recorded"}; elapsedMs={entry.ElapsedMs}"))
         .Prepend(new AssistantFact("build-stage", $"Guest family={build.Options.Installer.Guest}; current stage={build.Stage}"))
         .ToArray();
+
+    public static AssistantFact[] BuildFailure(TemplateBuild build)
+    {
+        var facts = Build(build).ToList();
+        if (BuildProxyComparison.From(build) is { } comparison)
+        {
+            facts.Add(new("proxy-before", DescribeCheck(comparison.Baseline)));
+            facts.Add(new("proxy-now", DescribeCheck(comparison.Current)));
+            facts.Add(new("proxy-change", $"Observed Windows route changed={comparison.RouteChanged?.ToString() ?? "unknown"}"));
+        }
+        else if (build.ProxyChecks.LastOrDefault() is { } latest)
+            facts.Add(new("proxy-now", DescribeCheck(latest)));
+        return facts.ToArray();
+    }
+
+    private static string DescribeCheck(BuildProxyObservation check)
+    {
+        var text = $"{check.AtUtc:u}, stage={check.Stage}, source={check.Source}, route={check.Route}, " +
+            $"VPN tunnel={check.Tunnel}, policy={check.PolicyMatches}, proxy TCP={check.Tcp}, route conflict={check.RouteConflict}, " +
+            $"elapsedMs={check.ElapsedMs}";
+        return check.Guest is not { } guest ? text : text + $", repository={check.Target}, " +
+            $"guest route={guest.Route}, gateway={guest.Gateway}, relay={guest.RelayTcp}, CONNECT={guest.Connect}, " +
+            $"HTTPS={guest.Http}, result={guest.Result}, bytes={guest.DownloadBytes}";
+    }
 }

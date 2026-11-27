@@ -12,5 +12,6 @@
     <EmbeddedResource Include="Media/ImageSources.json" LogicalName="VMCrate.Core.ImageSources.json" />
     <EmbeddedResource Include="Guest/UpdateProxyProbe.sh" LogicalName="VMCrate.Core.UpdateProxyProbe.sh" />
     <EmbeddedResource Include="Guest/LinuxInventory.sh" LogicalName="VMCrate.Core.LinuxInventory.sh" />
+    <EmbeddedResource Include="Guest/LinuxIsolationProbe.sh" LogicalName="VMCrate.Core.LinuxIsolationProbe.sh" />
   </ItemGroup>
 </Project>

@@ -16,7 +16,7 @@ public sealed partial class LabService
         await ProvisionMachineAsync(state, machine, iso, options.DiskGiB);
     }
 
-    public async Task CreateCloneAsync(Guid templateId, MachineOptions options, bool disposable = false)
+    public async Task<Machine> CreateCloneAsync(Guid templateId, MachineOptions options, bool disposable = false)
     {
         using var workspaceLock = store.Lock();
         var state = store.Load();
@@ -26,6 +26,7 @@ public sealed partial class LabService
         var machine = NewMachine(state, options, template.Guest, template.SecureBoot, template.Id)
             with { Disposable = disposable };
         await ProvisionMachineAsync(state, machine, null, 0);
+        return machine;
     }
 
     public async Task ImportTemplateAsync(string name, GuestFamily guest, bool secureBoot, string source)
@@ -55,6 +56,7 @@ public sealed partial class LabService
         var state = store.Load();
         var template = FindTemplate(state, id);
         if (state.Machines.Any(machine => machine.TemplateId == id) ||
+            state.Builds.Any(job => job.Options.RevisionTrial && job.Options.PreviousTemplateId == id && job.Stage != BuildStage.Complete) ||
             (!template.Published && state.Builds.Any(job => job.Id == id)))
             throw new LabException("error.inUse");
 

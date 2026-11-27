@@ -31,27 +31,44 @@ internal sealed record ProxyLeaseWatcher(Guid Machine, string Workspace, DateTim
 
     internal async Task<int> RunAsync()
     {
-        while (ExpiresUtc > DateTimeOffset.UtcNow)
-        {
-            var remaining = ExpiresUtc - DateTimeOffset.UtcNow;
-            await Task.Delay((int)Math.Clamp(remaining.TotalMilliseconds, 1, 3000));
-        }
         if (!WorkspaceVolume.HasCatalog(Workspace))
             return 0;
+        var runtime = Path.Combine(Workspace, "jobs");
+        LocalPaths.RequireOrdinaryPath(runtime);
+        Directory.CreateDirectory(runtime);
+        var path = Path.Combine(runtime, $"proxy-{Machine:N}-{ExpiresUtc.UtcTicks}.lock");
+        LocalPaths.RequireOrdinaryPath(path);
+        FileStream singleton;
+        try { singleton = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose); }
+        catch (IOException error) when ((error.HResult & 0xffff) is 32 or 33) { return 0; }
+        using var ownership = singleton;
 
         var lab = new LabService(Workspace, new PowerShellHypervisor(), new UdfInboxWriter());
-        for (var attempt = 0; attempt < 10; attempt++)
+        var attempts = 0;
+        while (attempts < 60)
         {
             try
             {
-                await lab.ExpireUpdateLeaseAsync(Machine);
-                return 0;
+                if (await lab.WatchUpdateRouteAsync(Machine, ExpiresUtc))
+                    return 0;
+                attempts = 0;
             }
-            catch (LabException error) when (error.Key is "error.busy" or "error.host" or "error.backend")
+            catch (LabException error) when (error.Key == "error.busy")
             {
-                await Task.Delay(TimeSpan.FromSeconds(3));
+                attempts = 0;
             }
+            catch (LabException error) when (error.Key is "error.host" or "error.backend" or "error.timeout")
+            {
+                attempts++;
+            }
+            await Task.Delay(TimeSpan.FromSeconds(4));
         }
         return 1;
+    }
+
+    internal static void WakePending(LabService lab)
+    {
+        foreach (var lease in lab.ReadUpdateLeases())
+            Start(lease.Id, lab.WorkspaceDirectory, lease.ExpiresUtc);
     }
 }

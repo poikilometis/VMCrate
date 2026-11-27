@@ -51,8 +51,12 @@ public sealed partial class PowerShellHypervisor : IHypervisor
 
     public Task RegisterPreparedDiskAsync(MachineLocation location, string disk) =>
         InvokeAsync<bool>("RegisterPreparedDisk", new { location, disk, installerIso = (string?)null, diskGiB = 0 });
+    public Task BindDiskParentAsync(string disk, string parent) => InvokeAsync<bool>("BindDiskParent", new { disk, parent });
+    public Task AttachOutboxAsync(MachineLocation location, long createBytes) => InvokeAsync<bool>("AttachOutbox", new { location, createBytes });
+    public Task DetachOutboxAsync(MachineLocation location) => InvokeAsync<bool>("DetachOutbox", new { location });
 
     public Task StartAsync(MachineLocation location) => InvokeAsync<bool>("Start", new { location });
+    public Task ShutdownAsync(MachineLocation location) => InvokeAsync<bool>("Shutdown", new { location });
     public Task PowerOffAsync(MachineLocation location) => InvokeAsync<bool>("PowerOff", new { location });
     public Task ResetDiskAsync(MachineLocation location, string replacementDisk) =>
         InvokeAsync<bool>("ResetDisk", new { location, replacementDisk });
@@ -62,6 +66,7 @@ public sealed partial class PowerShellHypervisor : IHypervisor
     public Task DeleteAsync(MachineLocation location) => InvokeAsync<bool>("Delete", new { location });
     public Task SetNetworkAsync(MachineLocation location) => InvokeAsync<bool>("SetNetwork", new { location });
     public Task CloseExpiredUpdateAsync(MachineLocation location) => InvokeAsync<bool>("CloseExpiredUpdate", new { location });
+    public Task CloseDriftedUpdateAsync(MachineLocation location) => InvokeAsync<bool>("CloseDriftedUpdate", new { location });
     public Task SetInboxAsync(MachineLocation location, string? isoPath) =>
         InvokeAsync<bool>("SetInbox", new { location, isoPath });
     public Task EjectInstallerAsync(MachineLocation location) =>
@@ -70,17 +75,23 @@ public sealed partial class PowerShellHypervisor : IHypervisor
     public Task ArmInstallerSeedAsync(MachineLocation location, string isoPath) =>
         InvokeAsync<bool>("ArmInstallerSeed", new { location, isoPath });
 
-    public async Task OpenConsoleAsync(MachineLocation location)
-    {
-        var name = await InvokeAsync<string>("Console", new { location });
-        var start = new ProcessStartInfo(Path.Combine(SystemDirectory, "vmconnect.exe")) { UseShellExecute = false };
-        start.ArgumentList.Add("localhost");
-        start.ArgumentList.Add(name);
-        using var process = Process.Start(start);
-    }
-
     private async Task<T> InvokeAsync<T>(string operation, object request, TimeSpan? timeLimit = null,
         CancellationToken cancellation = default)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { return await InvokeOnceAsync<T>(operation, request, timeLimit, cancellation); }
+            catch (LabException error) when (error.Key == "error.bootstrap")
+            {
+                if (attempt >= 2)
+                    throw new LabException("error.host", operation, error);
+                await Task.Delay(TimeSpan.FromMilliseconds(400 * (attempt + 1)), cancellation);
+            }
+        }
+    }
+
+    private async Task<T> InvokeOnceAsync<T>(string operation, object request, TimeSpan? timeLimit,
+        CancellationToken cancellation)
     {
         if (!File.Exists(PowerShell) || !File.Exists(script))
             throw new LabException("error.host");
@@ -98,8 +109,11 @@ public sealed partial class PowerShellHypervisor : IHypervisor
             WorkingDirectory = AppContext.BaseDirectory
         };
         // A fresh Windows client defaults to Restricted. Honor any configured policy.
-        var launcher = "if (-not (Get-ExecutionPolicy -List | Where-Object ExecutionPolicy -ne Undefined)) " +
-            "{ Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned -Force }; " +
+        var launcher = "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); " +
+            "try { Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -ErrorAction Stop; " +
+            "if (-not (Get-ExecutionPolicy -List -ErrorAction Stop | Where-Object ExecutionPolicy -ne Undefined)) " +
+            "{ Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned -Force -ErrorAction Stop } } " +
+            "catch { [Console]::WriteLine('{\"ok\":false,\"code\":\"error.bootstrap\"}'); exit 1 }; " +
             $"& '{script.Replace("'", "''", StringComparison.Ordinal)}' -Operation '{operation}'";
         foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-Command", launcher })
             start.ArgumentList.Add(argument);

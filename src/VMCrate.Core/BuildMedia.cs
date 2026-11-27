@@ -17,21 +17,16 @@ public sealed partial class LabService
         }
 
         var input = LocalPaths.RequireFile(build.Options.Installer.IsoPath, ".iso");
-        WorkspaceCapacity.RequireSpace(target, new FileInfo(input).Length);
-        var staged = Path.Combine(store.Media, $"{Guid.NewGuid():N}.tmp");
-        try
-        {
-            var digest = await FileDigests.CopyAndHashAsync(input, staged, progress, cancellation);
-            cancellation.ThrowIfCancellationRequested();
-            if (digest != build.Options.Hash)
-                throw new LabException("error.isoMismatch", digest);
-
-            File.Move(staged, target);
-            File.SetAttributes(target, File.GetAttributes(target) | FileAttributes.ReadOnly);
-        }
-        finally
+        var staged = Path.Combine(store.Media, $"{build.Id:N}.copying");
+        WorkspaceCapacity.RequireSpace(target, ResumableFileCopy.RemainingBytes(input, staged));
+        var digest = await ResumableFileCopy.CopyAsync(input, staged, progress, cancellation);
+        cancellation.ThrowIfCancellationRequested();
+        if (digest != build.Options.Hash)
         {
             File.Delete(staged);
+            throw new LabException("error.isoMismatch", digest);
         }
+        File.Move(staged, target);
+        File.SetAttributes(target, File.GetAttributes(target) | FileAttributes.ReadOnly);
     }
 }

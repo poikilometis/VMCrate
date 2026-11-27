@@ -5,7 +5,7 @@ public enum NetworkMode { Offline, Private, Updates }
 public enum PowerState { Off, Running, Saved, Other, Missing, Unavailable }
 
 public sealed record Template(Guid Id, string Name, GuestFamily Guest, bool SecureBoot, string? Sha256 = null, string? Revision = null, DateTimeOffset? CreatedUtc = null, RevisionLink? Lineage = null,
-    DateTimeOffset? BootVerifiedUtc = null, MediaProvenance? Media = null, bool Published = true);
+    DateTimeOffset? BootVerifiedUtc = null, MediaProvenance? Media = null, bool Published = true, bool Preferred = false);
 public sealed record Machine(
     Guid Id, string Name, GuestFamily Guest, bool SecureBoot, Guid? TemplateId,
     int MemoryGiB, int CpuCount, NetworkMode Network,
@@ -20,11 +20,14 @@ public sealed record LabSnapshot(
     IReadOnlyList<Template> Templates, IReadOnlyList<Machine> Machines,
     HostObservation? Host, LabException? HostError, LabException? CleanupError = null, bool RecoverySuggested = false)
 {
+    public TemplateBuild[] Builds { get; init; } = [];
+    public OperationEntry[] RecentOperations { get; init; } = [];
+
     public PowerState StateOf(Guid id) =>
         Host?.Machines.FirstOrDefault(vm => vm.Id == id)?.State ?? PowerState.Unavailable;
 }
 
-public sealed record MachineLocation(Machine Machine, Guid WorkspaceId, string Directory, string? BaseDisk)
+public sealed record MachineLocation(Machine Machine, Guid WorkspaceId, string Directory, string? BaseDisk, string? OutboxDisk = null)
 {
     public string DiskDirectory => Path.Combine(Directory, "disks");
     public string InboxDirectory => Path.Combine(Directory, "inbox");

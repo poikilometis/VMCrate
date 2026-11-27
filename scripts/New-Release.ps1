@@ -1,7 +1,8 @@
 #Requires -Version 7.0
 [CmdletBinding()]
 param([string]$OutputDirectory = 'artifacts/releases',
-    [ValidatePattern('^[0-9a-fA-F]{40}$')][string]$SigningThumbprint)
+    [ValidatePattern('^[0-9a-fA-F]{40}$')][string]$SigningThumbprint,
+    [switch]$SignExecutables, [uri]$TimestampServer)
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ReleaseSignature.ps1')
@@ -13,6 +14,10 @@ if (-not $IsWindows -or [System.Runtime.InteropServices.RuntimeInformation]::Pro
 $props = [xml](Get-Content -LiteralPath (Join-Path $repository 'Directory.Build.props') -Raw)
 $version = [string]$props.Project.PropertyGroup.Version
 if ($version -notmatch '^\d+\.\d+\.\d+(?:-preview\.\d+)?$') { throw 'Invalid release version in Directory.Build.props.' }
+if ($SignExecutables -and (-not $SigningThumbprint -or -not $TimestampServer.IsAbsoluteUri -or
+    $TimestampServer.Scheme -notin @('http', 'https'))) {
+    throw 'Executable signing requires a code-signing certificate and timestamp server.'
+}
 
 $dotnet = (Get-Command dotnet.exe -CommandType Application | Select-Object -First 1).Source
 $dotnetRoot = Split-Path -Parent $dotnet
@@ -80,11 +85,22 @@ try {
         }
     }
 
+    $certificate = if ($SigningThumbprint) { Get-Item -LiteralPath "Cert:\CurrentUser\My\$SigningThumbprint" }
+    if ($SignExecutables) {
+        foreach ($relative in @('VMCrate.exe', 'cli/VMCrate.Cli.exe', 'host/VMCrate.Host.exe')) {
+            $signed = Set-AuthenticodeSignature -LiteralPath (Join-Path $stage $relative) -Certificate $certificate `
+                -HashAlgorithm SHA256 -TimestampServer $TimestampServer.AbsoluteUri
+            if ($signed.Status -ne 'Valid' -or -not $signed.TimeStamperCertificate -or
+                $signed.SignerCertificate.Thumbprint -ne $SigningThumbprint) {
+                throw "Authenticode verification failed for $relative ($($signed.Status))."
+            }
+        }
+    }
+
     [IO.Compression.ZipFile]::CreateFromDirectory($stage, $stagedZip, [IO.Compression.CompressionLevel]::Optimal, $false)
     $digest = (Get-FileHash -LiteralPath $stagedZip -Algorithm SHA256).Hash.ToLowerInvariant()
     [IO.File]::WriteAllText($stagedHash, "$digest  $zipName$([Environment]::NewLine)", [Text.Encoding]::ASCII)
     if ($SigningThumbprint) {
-        $certificate = Get-Item -LiteralPath "Cert:\CurrentUser\My\$SigningThumbprint"
         New-CrateManifestSignature -Manifest $stagedHash -Destination $stagedSignature -Certificate $certificate
     }
     [IO.File]::Move($stagedZip, $zip, $true)

@@ -63,6 +63,10 @@ function Assert-CrateBaseDisk([string]$Path) {
 
 function Get-CrateDisk($Vm, $Location) {
     $drives = @(Get-VMHardDiskDrive -VM $Vm)
+    $outbox = $Location.PSObject.Properties['outboxDisk']
+    if ($outbox -and $outbox.Value) {
+        $drives = @($drives | Where-Object { -not (Test-CrateOutboxDrive $_ $outbox.Value) })
+    }
     if ($drives.Count -ne 1 -or $drives[0].ControllerLocation -ne 0 -or
         $drives[0].ControllerNumber -ne 0 -or
         -not (Test-CrateArtifact $drives[0].Path $Location.diskDirectory '.vhdx')) {

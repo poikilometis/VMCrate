@@ -7,14 +7,16 @@ public sealed partial class LabService
         using var workspaceLock = store.Lock();
         var state = store.Load();
         var machine = FindMachine(state, id);
-        RequireNoDiskRestore(state, machine.Id);
-        if (state.Provisions.Any(item => item.Id == machine.Id))
-            throw new LabException("error.recoveryRequired");
-        if (machine.Proxy?.IsExpired(DateTimeOffset.UtcNow) == true)
-            throw new LabException("status.proxyExpired");
-        if (machine.SessionStarted)
-            throw new LabException("error.sessionEnded");
+        await StartMachineAsync(state, machine);
+    }
 
+    private async Task StartMachineAsync(LabState state, Machine machine)
+    {
+        ValidateStart(state, machine);
+        if (await CloseOnRouteDriftAsync(state, machine))
+            throw new LabException("error.proxyDrift");
+        await ObserveBuildProxyAsync(state, machine, BuildProxySource.Start);
+        ValidateStart(state, machine);
         var location = store.Location(state, machine);
         LocalPaths.RequireOrdinaryPath(location.Directory);
         await hypervisor.StartAsync(location);
@@ -23,8 +25,38 @@ public sealed partial class LabService
             // Arming follows a confirmed boot. An ambiguous boot never triggers automatic removal.
             state.Machines[state.Machines.IndexOf(machine)] = machine with { SessionStarted = true };
         }
-        RecordOperation(state, id, RecordedOperation.Start);
+        RecordOperation(state, machine.Id, RecordedOperation.Start);
         store.Save(state);
+    }
+
+    public async Task RestartGuestAsync(Guid id)
+    {
+        using var workspaceLock = store.Lock();
+        var state = store.Load();
+        var machine = FindMachine(state, id);
+        if (machine.Disposable)
+            throw new LabException("error.guestRestart");
+        ValidateStart(state, machine);
+        var location = store.Location(state, machine);
+        LocalPaths.RequireOrdinaryPath(location.Directory);
+        if (await ObserveOneAsync(location) is not { State: PowerState.Running, Findings.Length: 0 })
+            throw new LabException("error.guestRestart");
+
+        await hypervisor.ShutdownAsync(location);
+        if (await ObserveOneAsync(location) is not { State: PowerState.Off, Findings.Length: 0 })
+            throw new LabException("error.guestRestart");
+        await StartMachineAsync(state, machine);
+    }
+
+    private static void ValidateStart(LabState state, Machine machine)
+    {
+        RequireNoDiskRestore(state, machine.Id);
+        if (state.Provisions.Any(item => item.Id == machine.Id))
+            throw new LabException("error.recoveryRequired");
+        if (machine.Proxy?.IsExpired(DateTimeOffset.UtcNow) == true)
+            throw new LabException("status.proxyExpired");
+        if (machine.SessionStarted)
+            throw new LabException("error.sessionEnded");
     }
 
     public async Task EndDisposableAsync(Guid id)

@@ -7,7 +7,11 @@ public sealed record HyperVIsolation(PowerState State, bool? NetworkPolicyMatche
     bool? EnhancedSessionAllowed, bool? MediaLayoutMatches, bool? InboxAttached);
 
 public sealed record IsolationObservation(NetworkMode Profile, DateTimeOffset ObservedUtc, HyperVIsolation Host,
-    UpdateProxy? Proxy, GuestNetworkCheck? Guest = null, DateTimeOffset? GuestObservedUtc = null);
+    UpdateProxy? Proxy, GuestNetworkCheck? Guest = null, DateTimeOffset? GuestObservedUtc = null, bool GuestReported = false)
+{
+    public bool? DefaultRouteCheck => Guest is { IPv4DefaultRoutes: int v4, IPv6DefaultRoutes: int v6 } &&
+        Profile is NetworkMode.Offline or NetworkMode.Private ? v4 == 0 && v6 == 0 : null;
+}
 
 public sealed partial class LabService
 {

@@ -9,8 +9,10 @@ public sealed partial class LabService
         using var workspaceLock = store.Lock();
         var state = store.Load();
         var vm = FindMachine(state, id);
-        if (vm is not { Guest: GuestFamily.Windows, Disposable: false, TemplateId: not null, Network: NetworkMode.Offline })
+        if (vm is not { Guest: GuestFamily.Windows, Disposable: false, Network: NetworkMode.Offline } ||
+            (vm.TemplateId is null && !IsRevisionTrial(state, id)))
             throw new LabException("error.guestProbe");
+        RequireNoDiskRestore(state, id);
         var isolation = await ObserveIsolationAsync(state, vm);
         if (isolation.Host is not { State: PowerState.Running, NetworkPolicyMatches: true })
             throw new LabException("error.isolation");

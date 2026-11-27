@@ -20,17 +20,24 @@ public interface IHypervisor
     Task<string> GetCaptureDiskAsync(MachineLocation location);
     Task ExportWorkingDiskAsync(MachineLocation location, string destination, CancellationToken cancellation);
     Task RegisterPreparedDiskAsync(MachineLocation location, string disk);
+    Task BindDiskParentAsync(string disk, string parent);
     Task StartAsync(MachineLocation location);
+    Task ShutdownAsync(MachineLocation location);
     Task PowerOffAsync(MachineLocation location);
     Task ResetDiskAsync(MachineLocation location, string replacementDisk);
     Task RestoreDisksAsync(IReadOnlyList<DiskRestoreChange> changes);
     Task DeleteAsync(MachineLocation location);
     Task SetNetworkAsync(MachineLocation location);
     Task CloseExpiredUpdateAsync(MachineLocation location);
+    Task CloseDriftedUpdateAsync(MachineLocation location);
     Task SetInboxAsync(MachineLocation location, string? isoPath);
     Task EjectInstallerAsync(MachineLocation location);
     Task ArmInstallerSeedAsync(MachineLocation location, string isoPath);
     Task OpenConsoleAsync(MachineLocation location);
+    Task ReconnectConsoleAsync(MachineLocation location);
+    Task CloseConsoleAsync(MachineLocation location);
+    Task AttachOutboxAsync(MachineLocation location, long createBytes);
+    Task DetachOutboxAsync(MachineLocation location);
 }
 
 public interface IInboxWriter

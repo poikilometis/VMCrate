@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using VMCrate.Core;
@@ -23,7 +24,7 @@ internal static partial class LiveAcceptance
         string[] required = ["installer-and-recovery", "clones-and-private-lab", "publisher-resume"];
         if (readiness.HyperV != HyperVReadiness.Ready)
         {
-            WriteCompatibility(root, readiness, "Blocked", [], required);
+            WriteCompatibility(root, readiness, "Blocked", [], required, []);
             Console.WriteLine($"BLOCKED Hyper-V readiness {readiness.HyperV} · {readiness.Detail}");
             return 2;
         }
@@ -41,20 +42,21 @@ internal static partial class LiveAcceptance
 
         var credentials = checkWindowsGuest ? ReadWindowsGuestCredentials() : null;
         var checkedGroups = new List<string>();
-        if (await RunCaseAsync(root, required[0], host, workspace => InstallerRecoveryAsync(workspace, windows, linux)) == 1)
+        var durations = new Dictionary<string, long>();
+        if (await RunCaseAsync(root, required[0], host, workspace => InstallerRecoveryAsync(workspace, windows, linux), durations) == 1)
             checkedGroups.Add(required[0]);
-        if (await RunCaseAsync(root, required[1], host, workspace => CloneLifecycleAsync(workspace, windows, linux, credentials)) == 1)
+        if (await RunCaseAsync(root, required[1], host, workspace => CloneLifecycleAsync(workspace, windows, linux, credentials), durations) == 1)
             checkedGroups.Add(required[1]);
-        if (await RunCaseAsync(root, required[2], host, workspace => PublisherResumeAsync(workspace, linux)) == 1)
+        if (await RunCaseAsync(root, required[2], host, workspace => PublisherResumeAsync(workspace, linux), durations) == 1)
             checkedGroups.Add(required[2]);
         var passed = checkedGroups.Count;
         if (credentials is not null && checkedGroups.Contains(required[1]))
             checkedGroups.Add("windows-guest-observations");
-        WriteCompatibility(root, readiness, passed == required.Length ? "Passed" : "Failed", checkedGroups.ToArray(), required);
+        WriteCompatibility(root, readiness, passed == required.Length ? "Passed" : "Failed", checkedGroups.ToArray(), required, durations);
         Console.WriteLine($"{passed}/3 automated Hyper-V acceptance groups passed.");
         if (credentials is null)
             Console.WriteLine("PENDING Windows guest inbox, route and CBS inventory observations. Use -CheckWindowsGuest on the test host.");
-        Console.WriteLine("PENDING guest console installation, Linux guest inbox, peer isolation and proxy checks, Windows Sandbox UI.");
+        Console.WriteLine("PENDING full guest installation, Linux guest probe, peer traffic test, VPN change, and Windows Sandbox UI.");
         return passed == 3 ? 0 : 1;
     }
 
@@ -68,12 +70,14 @@ internal static partial class LiveAcceptance
         return new(iso, evidence.Sha256, disk);
     }
 
-    private static async Task<int> RunCaseAsync(string root, string name, IHypervisor host, Func<LiveWorkspace, Task> check)
+    private static async Task<int> RunCaseAsync(string root, string name, IHypervisor host, Func<LiveWorkspace, Task> check,
+        Dictionary<string, long> durations)
     {
         var directory = Path.Combine(root, name);
         Expect(!Directory.Exists(directory), "Live acceptance requires an empty test directory.");
         var workspace = new LiveWorkspace(directory, host);
         Console.WriteLine($"RUN {name}");
+        var start = Stopwatch.GetTimestamp();
         var passed = true;
         try { await check(workspace); }
         catch (Exception error)
@@ -87,8 +91,9 @@ internal static partial class LiveAcceptance
             Console.WriteLine($"FAIL {name} cleanup · {error.Message}");
             passed = false;
         }
+        durations.Add(name, (long)Stopwatch.GetElapsedTime(start).TotalMilliseconds);
         if (passed)
-            Console.WriteLine($"PASS {name}");
+            Console.WriteLine($"PASS {name} · {durations[name] / 1000d:N1} s");
         return passed ? 1 : 0;
     }
 }

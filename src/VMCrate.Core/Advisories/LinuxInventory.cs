@@ -12,7 +12,7 @@ public sealed partial class LabService
         var state = store.Load();
         var vm = FindMachine(state, id);
         if (vm is not { Guest: GuestFamily.Linux, Disposable: false, Network: NetworkMode.Offline } ||
-            vm.TemplateId != template || state.Provisions.Any(item => item.Id == id))
+            (vm.TemplateId != template && !IsRevisionTrial(state, id, template)) || state.Provisions.Any(item => item.Id == id))
             throw new LabException("error.linuxInventory");
 
         RequireNoDiskRestore(state, id);

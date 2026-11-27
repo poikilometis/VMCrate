@@ -52,10 +52,10 @@ namespace VMCrate {
     }
 }
 
-function Get-CrateRouteConflicts($Switches) {
+function Get-CrateRouteConflicts($Switches, $RouteSnapshot) {
     $conflicts = @{}
-    $routes = @(Get-NetRoute -AddressFamily IPv4 -ErrorAction Stop |
-        Where-Object { $_.DestinationPrefix -ne '0.0.0.0/0' })
+    $routes = $RouteSnapshot
+    if ($null -eq $routes) { $routes = @(Get-NetRoute -AddressFamily IPv4 -ErrorAction Stop) }
     foreach ($switch in $Switches) {
         if ($switch.type -ne 'Internal') { continue }
         $alias = 'vEthernet ({0})' -f $switch.name
@@ -63,7 +63,7 @@ function Get-CrateRouteConflicts($Switches) {
             $attached = Get-CrateIpv4Range $network
             if (-not $attached) { continue }
             foreach ($route in $routes) {
-                if ($route.InterfaceAlias -eq $alias) { continue }
+                if ($route.InterfaceAlias -eq $alias -or $route.DestinationPrefix -eq '0.0.0.0/0') { continue }
                 $routed = Get-CrateIpv4Range $route.DestinationPrefix
                 if ($routed -and $attached.First -le $routed.Last -and $routed.First -le $attached.Last) {
                     $conflicts['{0}/{1}/{2}' -f $switch.id, $route.InterfaceIndex, $route.DestinationPrefix] = $true
@@ -84,9 +84,11 @@ function Get-CrateHostNetwork($Request) {
 
     $natCount = $null
     $overlap = $null
+    $natPrefixes = $null
     try {
         $nats = @(Get-NetNat -ErrorAction Stop)
         $natCount = $nats.Count
+        $natPrefixes = @($nats | ForEach-Object { [string]$_.InternalIPInterfaceAddressPrefix } | Sort-Object)
         $ranges = @($nats | ForEach-Object { Get-CrateIpv4Range $_.InternalIPInterfaceAddressPrefix })
         $overlap = $false
         for ($j = 0; $j -lt $ranges.Count; $j++) {
@@ -100,24 +102,41 @@ function Get-CrateHostNetwork($Request) {
 
     $conflicts = $null
     try {
-        if ($switches.Count -gt 0) { $conflicts = Get-CrateRouteConflicts $switches }
-    } catch { }
+        if ($switches.Count -gt 0) {
+            $routes = @(Get-NetRoute -AddressFamily IPv4 -ErrorAction Stop)
+            $conflicts = 0
+            foreach ($switch in $switches) {
+                $switch.routeConflicts = Get-CrateRouteConflicts @($switch) $routes
+                $conflicts += $switch.routeConflicts
+            }
+        }
+    } catch { $conflicts = $null }
 
     $name = $null
     $isTunnel = $null
     $source = $null
     $length = $null
+    $index = $null
+    $nextHop = $null
+    $destination = $null
     if ($Request.proxyAddress) {
         $address = Get-CrateIpv4Bytes $Request.proxyAddress
         if ($null -ne $address) {
             try {
-                $selected = @(Find-NetRoute -RemoteIPAddress ($address -join '.') -ErrorAction Stop) |
+                $choices = @(Find-NetRoute -RemoteIPAddress ($address -join '.') -ErrorAction Stop)
+                $selected = $choices |
                     Where-Object { $_.PSObject.Properties['IPAddress'] } | Select-Object -First 1
+                $route = $choices | Where-Object { $_.PSObject.Properties['NextHop'] } | Select-Object -First 1
                 if ($selected) {
                     $name = $selected.InterfaceAlias
                     $isTunnel = $name -match 'VPN|WireGuard|Wintun|Tailscale|TAP'
                     $source = $selected.IPAddress
                     $length = $selected.PrefixLength
+                    $index = $selected.InterfaceIndex
+                }
+                if ($route) {
+                    $nextHop = $route.NextHop
+                    $destination = $route.DestinationPrefix
                 }
             } catch { }
             if (-not $name) {
@@ -135,5 +154,6 @@ function Get-CrateHostNetwork($Request) {
         routeKnown = $null -ne $name; interface = $name; isTunnel = $isTunnel
         switches = $switches; natCount = $natCount; overlappingNats = $overlap
         sourceAddress = $source; prefixLength = $length; routeConflicts = $conflicts
+        interfaceIndex = $index; nextHop = $nextHop; destinationPrefix = $destination; natPrefixes = $natPrefixes
     }
 }

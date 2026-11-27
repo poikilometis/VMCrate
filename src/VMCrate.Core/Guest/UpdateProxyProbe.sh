@@ -4,6 +4,7 @@ address='@PROXY_ADDRESS@'
 port='@PROXY_PORT@'
 relay='@RELAY_PORT@'
 repository='@REPOSITORY@'
+measure_download='@MEASURE_DOWNLOAD@'
 
 for tool in ip curl timeout; do
     command -v "$tool" >/dev/null || { printf 'Required command missing: %s\n' "$tool" >&2; exit 1; }
@@ -61,12 +62,26 @@ elif [[ -t 0 ]]; then
     fi
 fi
 
-codes=$(config | curl -q --config - --proxy "$proxy" --noproxy '' --proto '=https' \
-    --head --silent --output /dev/null --connect-timeout 5 --max-time 15 \
-    --write-out '%{http_connect} %{http_code}' "$repository")
+mode=(--head)
+if [[ "$measure_download" == 1 ]]; then
+    mode=(--range 0-262143 --max-filesize 262144)
+fi
+codes=$(config | LC_ALL=C curl -q --config - --proxy "$proxy" --noproxy '' --proto '=https' \
+    "${mode[@]}" --silent --output /dev/null --connect-timeout 5 --max-time 15 \
+    --write-out '%{http_connect} %{http_code} %{size_download} %{time_total}' "$repository")
 result=$?
 unset username password
-if [[ ! "$codes" =~ ^[0-9]{3}\ [0-9]{3}$ ]]; then
-    codes='000 000'
+connect='000'
+http='000'
+bytes=0
+elapsed=0
+if [[ "$codes" =~ ^([0-9]{3})\ ([0-9]{3})\ ([0-9]+)\ ([0-9]+)\.([0-9]+)$ ]]; then
+    connect="${BASH_REMATCH[1]}"
+    http="${BASH_REMATCH[2]}"
+    bytes=$((10#${BASH_REMATCH[3]}))
+    if (( bytes > 262144 )); then bytes=262144; fi
+    fraction="${BASH_REMATCH[5]}000"
+    elapsed=$((1000 * 10#${BASH_REMATCH[4]} + 10#${fraction:0:3}))
 fi
-printf 'VMCRATE_PROXY1 %s %s %s %s %s %s\n' "$route" "$gateway" "$proxy_tcp" "$relay_tcp" "$codes" "$result"
+printf 'VMCRATE_PROXY2 %s %s %s %s %s %s %s %s %s\n' \
+    "$route" "$gateway" "$proxy_tcp" "$relay_tcp" "$connect" "$http" "$result" "$bytes" "$elapsed"

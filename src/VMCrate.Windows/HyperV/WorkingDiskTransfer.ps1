@@ -1,3 +1,20 @@
+function Assert-CratePreparedChild([string]$Path, [string]$Parent) {
+    Assert-CratePath $Path
+    Assert-CratePath $Parent
+    $disk = Get-VHD -Path $Path
+    if ($disk.Attached -or $disk.VhdFormat -ne 'VHDX' -or $disk.VhdType -ne 'Differencing' -or
+        -not $disk.ParentPath -or [IO.Path]::GetFullPath($disk.ParentPath) -ne [IO.Path]::GetFullPath($Parent)) {
+        throw 'error.layout'
+    }
+}
+
+function Set-CrateCopiedDiskParent([string]$Path, [string]$Parent) {
+    Assert-CratePath $Path
+    Assert-CratePath $Parent
+    Set-VHD -Path $Path -ParentPath $Parent -Confirm:$false
+    Assert-CratePreparedChild $Path $Parent
+}
+
 function Export-CrateWorkingDisk($Vm, $Request) {
     $location = $Request.location
     Assert-CrateOff $Vm

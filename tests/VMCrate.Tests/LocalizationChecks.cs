@@ -85,6 +85,11 @@ internal static class LocalizationChecks
                 new ReportComparisonWindow(labels, []),
                 new LabGroupWindow(labels, lab), new StorageWindow(labels, lab), new CleanSessionWindow(labels, lab, temp.Root), new SessionProfilesWindow(labels, lab, temp.Root, null, new("", 4, 2)),
                 new FirstRunWindow(labels, temp.Root, () => Task.FromResult(new HostReadiness(HyperVReadiness.Ready, true, false, null)), null),
+                new FirstMachineWindow(labels, lab, temp.Root, () => Task.FromResult(new HostReadiness(HyperVReadiness.Ready, true, false, null))),
+                new LabBackupWindow(labels, lab, []), new BuildDiagnosticsWindow(labels, lab, Guid.NewGuid()),
+                new LocalJobsWindow(labels, lab), new OutboxWindow(labels, lab), new ResourcePlanWindow(labels, lab),
+                new LinuxIsolationDialog(labels, lab, Guid.NewGuid(), _ => { }), new AppUpdateWindow(labels, temp.Root, null),
+                new RevisionTrialWindow(labels, lab, new Template(Guid.NewGuid(), "Base", GuestFamily.Linux, false)),
                 new RecoveryWindow(labels, lab), new ImageCatalogWindow(labels, lab),
                 new AssistantSettingsWindow(labels), new DescriptionBlueprintWindow(labels, lab, []),
                 new SessionReportWindow(labels, lab), new UpdateAdvisorWindow(labels, lab, []),
@@ -102,7 +107,8 @@ internal static class LocalizationChecks
                 surface.Measure(new Size(520, 420));
                 surface.Arrange(new Rect(0, 0, 520, 420));
             }
-            Expect(workflows.All(item => item.FlowDirection == direction && !item.Title.StartsWith("tools.")),
+            Expect(workflows.All(item => item.FlowDirection == direction &&
+                !item.Title.StartsWith("tools.") && !item.Title.StartsWith("outbox.") && !item.Title.StartsWith("appUpdate.")),
                 $"Lab workflow localization failed for {locale.Id}.");
         }
         Expect(new Preferences(temp.Root).ReadLanguage() == "arz", "Language selection did not persist.");
