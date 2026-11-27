@@ -7,8 +7,11 @@ VMCrate targets Windows 11 x64 and the local Hyper-V PowerShell module. Windows 
 | 0.4 | Local Hyper-V acceptance | Three automated groups passed. Interactive installation and network checks were tracked separately. |
 | 0.6.0-preview.2 | Local test fixtures and extracted release | Windows adapter checks, application tests, localization, desktop startup and offline CLI validation passed. Live acceptance was blocked at host readiness. |
 | 0.6.0-preview.3 | Local tests and Kali 2026.3 installer | Local application and adapter checks include working-disk transfer and queue recovery. Kali EFI seed generation and the upstream checksum signature were verified. Live acceptance was blocked at host readiness. |
+| 0.7.0 | Physical Hyper-V on Windows build 26300 x64 | Windows and Kali installers started, and both prepared guests booted Offline. Interrupted ISO copy, publisher download resume, outbox handoff, Private lab disk recovery and a complete Offline restore were verified. |
 
 Run `tests/Start-HyperVAcceptance.ps1` with local, verified fixture images. The installer group interrupts and resumes an ISO copy and starts the installers. The clone group exercises Offline and Private networking, guest outbox attachment, disk recovery and restore from a lab backup. Add `-CheckWindowsGuest` to check the Windows guest's inbox, routes and CBS inventory. The compatibility receipt records the OS build, VMCrate version, group results and elapsed time. Attach it with the affected workflow when reporting a regression.
+
+The 0.7.0 restore check used a 47.9 GiB lab backup and recorded both guest heartbeats in 307 seconds, including cleanup. Acceptance continued after shortening the Hyper-V configuration path for the drill. The run covered Hyper-V startup and isolation settings. Full interactive installations, authenticated guest probes, guest file inspection and changing the host VPN remain separate checks.
 
 The manually dispatched Hyper-V workflow uses a dedicated Windows x64 runner with the `vmcrate-hyperv` label. Set `VMCRATE_TEST_FIXTURES` to the fixture JSON path on that runner. Use the exported receipt to record each result in the compatibility matrix.
 
