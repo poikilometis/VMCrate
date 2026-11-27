@@ -11,6 +11,14 @@ public static class WorkspaceSchemaUpdate
 
     public static void Prepare(string workspace, Guid id) => new StateStore(workspace).PrepareUpdate(id);
     public static void Rollback(string workspace, Guid id) => new StateStore(workspace).RollbackUpdate(id);
+
+    public static void DiscardIncomplete(string workspace, Guid id)
+    {
+        var directory = DirectoryFor(workspace, id);
+        LocalPaths.RequireOrdinaryPath(directory);
+        if (!File.Exists(Path.Combine(directory, "release.json")) && !File.Exists(Path.Combine(directory, "schema.json")))
+            LocalPaths.RemoveDirectory(Path.GetDirectoryName(directory)!, id);
+    }
 }
 
 internal sealed partial class StateStore

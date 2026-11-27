@@ -12,10 +12,30 @@ public partial class WorkspaceWindow
         ResumeDetail.Text = next.Detail;
         ResumeAction.Content = labels[next.Label];
         ExplainFailure.Visibility = FailureFacts().Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        RecentOperations.ItemsSource = snapshot?.RecentOperations.Take(6).Select(entry =>
-            $"{entry.TimeUtc.ToLocalTime():g} · {entry.Operation}" +
+        var catalog = snapshot;
+        RecentOperations.ItemsSource = catalog?.RecentOperations.Take(6).Select(entry =>
+            $"{entry.TimeUtc.ToLocalTime():g} · {OperationSubject(catalog, entry.Resource)} · {OperationLabel(entry.Operation)}" +
             (entry.Code is null ? "" : $" · {labels[entry.Code]}")).ToArray() ?? [];
     }
+
+    private static string OperationSubject(LabSnapshot state, Guid id) =>
+        state.Machines.FirstOrDefault(vm => vm.Id == id)?.Name ??
+        state.Templates.FirstOrDefault(template => template.Id == id)?.Name ??
+        state.Builds.FirstOrDefault(build => build.Id == id)?.Options.Name ?? id.ToString("N")[..8];
+
+    private string OperationLabel(RecordedOperation operation) => labels[operation switch
+    {
+        RecordedOperation.Prepare => "action.create",
+        RecordedOperation.Start => "action.start",
+        RecordedOperation.PowerOff => "action.powerOff",
+        RecordedOperation.Inbox => "action.send",
+        RecordedOperation.EjectInbox => "action.ejectInbox",
+        RecordedOperation.Reset => "action.reset",
+        RecordedOperation.Remove => "action.removeVm",
+        RecordedOperation.Build => "tools.builds",
+        RecordedOperation.VerifyRevision => "revision.verify",
+        _ => "tools.proxyTrace"
+    }];
 
     private AssistantFact[] FailureFacts()
     {

@@ -46,12 +46,11 @@
                   <Button Content="{Binding [tools.session]}" Click="OnCleanSession" />
                   <Button Content="{Binding [jobs.title]}" Click="OnLocalJobs" />
                   <Button Content="{Binding [resources.title]}" Click="OnResourcePlan" />
-                  <Button Content="{Binding [tools.journal]}" Click="OnOperationJournal" />
                   <Button x:Name="ExplainFailure" Content="{Binding [ai.explain]}" Click="OnExplainFailure" />
                 </WrapPanel>
               </StackPanel>
             </Border>
-            <TextBlock Text="{Binding [tools.journal]}" Style="{StaticResource Heading}" Margin="0,0,0,8" />
+            <Button Content="{Binding [tools.journal]}" HorizontalAlignment="Left" Click="OnOperationJournal" />
             <ListBox x:Name="RecentOperations" MaxHeight="184" AutomationProperties.Name="{Binding [tools.journal]}" />
           </StackPanel>
         </ScrollViewer>

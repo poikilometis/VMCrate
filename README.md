@@ -9,9 +9,9 @@
 
 [Download](https://github.com/poikilometis/VMCrate/releases) · [Quick start](#quick-start) · [Features](#features) · [Documentation](#documentation) · [Contributing](CONTRIBUTING.md)
 
-![VMCrate workspace with an Offline Debian VM and a private lab node](docs/images/workspace.png)
+![VMCrate Home showing a running Offline Debian VM and recent operations](docs/images/workspace.png)
 
-*VMCrate with example virtual machines.*
+*VMCrate Home with example activity from an Offline VM.*
 
 ## Features
 

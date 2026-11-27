@@ -21,7 +21,8 @@ internal sealed record ReleaseUpdate(Guid Id, string Version, string Sha256, str
         var file = LocalPaths.RequireFile(archive, ".zip");
         var name = Path.GetFileName(file);
         var v = typeof(ReleaseUpdate).Assembly.GetName().Version!;
-        if (!name.StartsWith(prefix, StringComparison.Ordinal) || !name.EndsWith(suffix, StringComparison.Ordinal) ||
+        if (name.Length <= prefix.Length + suffix.Length || !name.StartsWith(prefix, StringComparison.Ordinal) ||
+            !name.EndsWith(suffix, StringComparison.Ordinal) ||
             !System.Version.TryParse(name[prefix.Length..^suffix.Length], out var version) || version.Build < 0 ||
             version.Revision != -1 || name != $"{prefix}{version}{suffix}" || version < new Version(v.Major, v.Minor, v.Build))
             throw new LabException("error.appUpdate");
@@ -38,16 +39,28 @@ internal sealed record ReleaseUpdate(Guid Id, string Version, string Sha256, str
         var directory = WorkspaceSchemaUpdate.DirectoryFor(workspace, candidate.Id);
         LocalPaths.RequireOrdinaryPath(directory);
         Directory.CreateDirectory(directory);
-        var package = Path.Combine(directory, "package");
-        await ExtractAsync(source, package, cancellation);
-        foreach (var required in new[] { "VMCrate.exe", "VMCrate.dll", "runtime/dotnet.exe", "HyperV/Invoke-HyperV.ps1" })
-            LocalPaths.RequireFile(Path.Combine(package, required));
-        var packaged = AssemblyName.GetAssemblyName(Path.Combine(package, "VMCrate.dll")).Version;
-        if (packaged is null || packaged.Major != version.Major || packaged.Minor != version.Minor || packaged.Build != version.Build)
-            throw new LabException("error.appUpdate");
-        await using var output = new FileStream(Path.Combine(directory, "release.json"), FileMode.CreateNew, FileAccess.Write, FileShare.None);
-        await JsonSerializer.SerializeAsync(output, candidate, JsonDefaults.Options, cancellation);
-        output.Flush(flushToDisk: true);
+        try
+        {
+            var package = Path.Combine(directory, "package");
+            await ExtractAsync(source, package, cancellation);
+            foreach (var required in new[] { "VMCrate.exe", "VMCrate.dll", "runtime/dotnet.exe", "HyperV/Invoke-HyperV.ps1" })
+                LocalPaths.RequireFile(Path.Combine(package, required));
+            var packaged = AssemblyName.GetAssemblyName(Path.Combine(package, "VMCrate.dll")).Version;
+            if (packaged is null || packaged.Major != version.Major || packaged.Minor != version.Minor || packaged.Build != version.Build)
+                throw new LabException("error.appUpdate");
+            var temporary = Path.Combine(directory, "release.pending.json");
+            await using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                await JsonSerializer.SerializeAsync(output, candidate, JsonDefaults.Options, cancellation);
+                output.Flush(flushToDisk: true);
+            }
+            File.Move(temporary, Path.Combine(directory, "release.json"));
+        }
+        catch
+        {
+            WorkspaceSchemaUpdate.DiscardIncomplete(workspace, candidate.Id);
+            throw;
+        }
         return candidate;
     }
 

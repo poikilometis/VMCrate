@@ -15,7 +15,7 @@ public sealed class LocalJobQueue(string workspace)
         var existing = items.FirstOrDefault(item => item.Request == request && item.Status is LocalJobStatus.Queued or LocalJobStatus.Running);
         if (existing is not null)
             return existing;
-        var completed = items.Where(item => item.Status is LocalJobStatus.Succeeded or LocalJobStatus.Cancelled)
+        var completed = items.Where(item => item.Status is LocalJobStatus.Succeeded or LocalJobStatus.Failed or LocalJobStatus.Cancelled)
             .OrderByDescending(item => item.UpdatedUtc).Skip(79).Select(item => item.Id).ToHashSet();
         items.RemoveAll(item => completed.Contains(item.Id));
         if (items.Count >= 256)

@@ -8,23 +8,17 @@ public sealed class LocalJobWorker(LabService lab, OfficialImages images, Func<T
 
     public async Task RunAsync(CancellationToken cancellation = default)
     {
-        using var ownership = queue.TryOwnWorker();
-        if (ownership is null)
-            return;
-        queue.Recover();
-        for (var idle = 0; idle < 4 && !cancellation.IsCancellationRequested;)
+        do
         {
-            if (queue.Claim() is { } job)
-            {
+            using var ownership = queue.TryOwnWorker();
+            if (ownership is null)
+                return;
+            queue.Recover();
+            while (!cancellation.IsCancellationRequested && queue.Claim() is { } job)
                 await RunJobAsync(job, cancellation);
-                idle = 0;
-            }
-            else
-            {
-                idle++;
-                await Task.Delay(750, cancellation);
-            }
         }
+        // An enqueue racing with worker exit may see the old owner. Recheck after releasing it.
+        while (!cancellation.IsCancellationRequested && queue.Read().Any(job => job.Status == LocalJobStatus.Queued));
     }
 
     private async Task RunJobAsync(LocalJob job, CancellationToken cancellation)
