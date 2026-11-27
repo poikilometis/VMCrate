@@ -7,7 +7,7 @@
 
 **Reusable Hyper-V labs from a native Windows desktop.** Prepare a Windows or Linux template, launch an isolated test VM, and reset or discard the session when you're done.
 
-[Quick start](#quick-start) · [Features](#features) · [Documentation](#documentation) · [Contributing](CONTRIBUTING.md)
+[Download](https://github.com/poikilometis/VMCrate/releases) · [Quick start](#quick-start) · [Features](#features) · [Documentation](#documentation) · [Contributing](CONTRIBUTING.md)
 
 ![VMCrate workspace with an Offline Debian VM and a private lab node](docs/images/workspace.png)
 
@@ -35,7 +35,7 @@ The interface supports 15 languages. Optional AI integrations use a signed-in CL
 
 ### Run your first VM
 
-1. Download **VMCrate-win-x64** from a successful [Windows validation run](https://github.com/poikilometis/VMCrate/actions/workflows/ci.yml), or [build a ZIP locally](#build-and-test). Compare the inner ZIP's SHA-256 with the included `.sha256` file using `Get-FileHash`. Extract the whole package, then run `VMCrate.exe`.
+1. Download the Windows x64 ZIP and its `.sha256` file from [GitHub Releases](https://github.com/poikilometis/VMCrate/releases), or [build a ZIP locally](#build-and-test). Use `Get-FileHash` to compare the ZIP's SHA-256 with the checksum file. Extract the whole package, then run `VMCrate.exe`.
 2. Choose a workspace. In **Lab tools → Official image catalog**, select an installer, or import a prepared standalone disk from **Templates → Import VHDX**. The [template workflow](docs/operations.md#build-a-versioned-template) covers installation and capture.
 3. Select a template and choose **Create VM**, then **Start VM → Open console**. Use **Clean session** for disposable work or **Reset disk** to return a stopped clone to its base template.
 
