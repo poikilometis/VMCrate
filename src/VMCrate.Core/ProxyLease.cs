@@ -4,6 +4,10 @@ public sealed partial class LabService
 {
     public string WorkspaceDirectory => store.Root;
 
+    public (Guid Id, DateTimeOffset ExpiresUtc)[] ReadUpdateLeases() => store.Load().Machines
+        .Where(vm => vm.Proxy?.ExpiresUtc is not null)
+        .Select(vm => (vm.Id, vm.Proxy!.ExpiresUtc!.Value)).ToArray();
+
     public async Task ExpireUpdateLeaseAsync(Guid id)
     {
         using var workspaceLock = store.Lock();

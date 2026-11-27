@@ -92,8 +92,8 @@ public partial class App : Application
         MainWindow.Show();
         try
         {
-            await Task.Run(() => ProxyLeaseWatcher.WakeAsync(lab));
-            await Task.Run(() => LocalJobProcess.WakePending(preferences.Root));
+            await Task.WhenAll(Task.Run(() => ProxyLeaseWatcher.WakePending(lab)),
+                Task.Run(() => LocalJobProcess.WakePending(preferences.Root)));
         }
         catch (Exception error) { labels.ShowError(MainWindow, error); }
     }

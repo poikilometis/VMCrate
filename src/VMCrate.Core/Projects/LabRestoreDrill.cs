@@ -36,7 +36,8 @@ public sealed partial class LabService
         {
             // Reclaim an interrupted drill by its exact workspace before replaying it.
             await drill.CleanDrillAsync();
-            preview = await drill.PreviewLabBackupAsync(manifest, cancellation);
+            cancellation.ThrowIfCancellationRequested();
+            preview = drill.PlanDrillRestore(manifest);
             await drill.RestoreLabBackupAsync(manifest, preview, cancellation);
             var snapshot = await drill.ObserveAsync();
             if (snapshot.Host is null || snapshot.Machines.Count != preview.Backup.Machines.Length)
@@ -69,6 +70,12 @@ public sealed partial class LabService
         }
         finally { File.Delete(temporary); }
         return receipt;
+    }
+
+    private LabBackupPreview PlanDrillRestore(string manifest)
+    {
+        using var locked = store.Lock();
+        return PlanBackupRestore(store.Load(), manifest).Preview;
     }
 
     private async Task IsolateDrillCopyAsync(Guid id)

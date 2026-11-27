@@ -25,8 +25,9 @@ public sealed record UpdateProxy(Guid SwitchId, string Address, int Port, DateTi
 
     public string? RouteFingerprint(HostNetworkObservation? observation)
     {
-        if (observation is not { RouteKnown: true, Interface: not null, SourceAddress: not null, OverlappingNats: not true } ||
-            observation.RouteConflicts is > 0 || observation.Switches.SingleOrDefault(item => item.Id == SwitchId) is not { Type: "Internal" } adapter)
+        if (observation is not { RouteKnown: true, Interface: not null, SourceAddress: not null,
+            NatCount: not null, OverlappingNats: false, RouteConflicts: 0 } ||
+            observation.Switches.SingleOrDefault(item => item.Id == SwitchId) is not { Type: "Internal", IPv4Networks.Length: > 0 } adapter)
             return null;
         var bytes = JsonSerializer.SerializeToUtf8Bytes(new
         {

@@ -66,10 +66,9 @@ internal sealed record ProxyLeaseWatcher(Guid Machine, string Workspace, DateTim
         return 1;
     }
 
-    internal static async Task WakeAsync(LabService lab)
+    internal static void WakePending(LabService lab)
     {
-        var snapshot = await lab.ObserveAsync();
-        foreach (var machine in snapshot.Machines.Where(vm => vm.Proxy?.ExpiresUtc is not null))
-            Start(machine.Id, lab.WorkspaceDirectory, machine.Proxy!.ExpiresUtc!.Value);
+        foreach (var lease in lab.ReadUpdateLeases())
+            Start(lease.Id, lab.WorkspaceDirectory, lease.ExpiresUtc);
     }
 }
