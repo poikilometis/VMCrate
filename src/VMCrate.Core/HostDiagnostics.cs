@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace VMCrate.Core;
 
-public sealed record HostSwitch(Guid Id, string Name, string Type, string[] IPv4Networks);
+public sealed record HostSwitch(Guid Id, string Name, string Type, string[] IPv4Networks, int? RouteConflicts = null);
 public sealed record HostNetworkObservation(
     bool RouteKnown, string? Interface, bool? IsTunnel, HostSwitch[] Switches,
     int? NatCount, bool? OverlappingNats, string? SourceAddress, int? PrefixLength, int? RouteConflicts = null,

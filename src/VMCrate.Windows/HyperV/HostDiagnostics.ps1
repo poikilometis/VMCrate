@@ -52,10 +52,10 @@ namespace VMCrate {
     }
 }
 
-function Get-CrateRouteConflicts($Switches) {
+function Get-CrateRouteConflicts($Switches, $RouteSnapshot) {
     $conflicts = @{}
-    $routes = @(Get-NetRoute -AddressFamily IPv4 -ErrorAction Stop |
-        Where-Object { $_.DestinationPrefix -ne '0.0.0.0/0' })
+    $routes = $RouteSnapshot
+    if ($null -eq $routes) { $routes = @(Get-NetRoute -AddressFamily IPv4 -ErrorAction Stop) }
     foreach ($switch in $Switches) {
         if ($switch.type -ne 'Internal') { continue }
         $alias = 'vEthernet ({0})' -f $switch.name
@@ -63,7 +63,7 @@ function Get-CrateRouteConflicts($Switches) {
             $attached = Get-CrateIpv4Range $network
             if (-not $attached) { continue }
             foreach ($route in $routes) {
-                if ($route.InterfaceAlias -eq $alias) { continue }
+                if ($route.InterfaceAlias -eq $alias -or $route.DestinationPrefix -eq '0.0.0.0/0') { continue }
                 $routed = Get-CrateIpv4Range $route.DestinationPrefix
                 if ($routed -and $attached.First -le $routed.Last -and $routed.First -le $attached.Last) {
                     $conflicts['{0}/{1}/{2}' -f $switch.id, $route.InterfaceIndex, $route.DestinationPrefix] = $true
@@ -102,8 +102,15 @@ function Get-CrateHostNetwork($Request) {
 
     $conflicts = $null
     try {
-        if ($switches.Count -gt 0) { $conflicts = Get-CrateRouteConflicts $switches }
-    } catch { }
+        if ($switches.Count -gt 0) {
+            $routes = @(Get-NetRoute -AddressFamily IPv4 -ErrorAction Stop)
+            $conflicts = 0
+            foreach ($switch in $switches) {
+                $switch.routeConflicts = Get-CrateRouteConflicts @($switch) $routes
+                $conflicts += $switch.routeConflicts
+            }
+        }
+    } catch { $conflicts = $null }
 
     $name = $null
     $isTunnel = $null

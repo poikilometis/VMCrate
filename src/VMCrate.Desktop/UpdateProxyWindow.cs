@@ -49,11 +49,12 @@ internal sealed class UpdateProxyWindow : WorkflowWindow
             ? Text.Format("diag.route", network.Interface ?? "—", network.SourceAddress ?? "—") +
                 (network.IsTunnel == true ? " · " + Text["diag.tunnel"] : "")
             : Text["diag.routeMissing"];
-        if (switches.SelectedItem is HostSwitch selected)
-            route.Text += Environment.NewLine + string.Join(", ", selected.IPv4Networks);
+        var active = network?.Switches.FirstOrDefault(item => item.Id == (switches.SelectedValue as Guid?));
+        if (active is not null)
+            route.Text += Environment.NewLine + string.Join(", ", active.IPv4Networks);
         if (network is { DestinationPrefix: not null } found)
             route.Text += Environment.NewLine + $"{found.DestinationPrefix} → {found.NextHop ?? "—"}";
-        if (network?.OverlappingNats == true || network?.RouteConflicts > 0)
+        if (network?.OverlappingNats == true || (active?.RouteConflicts ?? network?.RouteConflicts) > 0)
             route.Text += Environment.NewLine + Text["trace.routeConflict"];
         return network;
     }

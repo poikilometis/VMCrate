@@ -46,8 +46,8 @@ internal static class Release07Checks
         var sw = Guid.NewGuid();
         var expiry = DateTimeOffset.UtcNow.AddMinutes(30);
         var proxy = UpdateProxy.Create(sw, "203.0.113.7", 8080, expiry);
-        host.ProxyRoute = host.ProxyRoute with { Switches = [new(sw, "fixture", "Internal", ["192.0.2.1/24"])],
-            InterfaceIndex = 5, NextHop = "192.0.2.254", NatPrefixes = ["192.0.2.0/24"], RouteConflicts = 0 };
+        host.ProxyRoute = host.ProxyRoute with { Switches = [new(sw, "fixture", "Internal", ["192.0.2.1/24"], 0)],
+            InterfaceIndex = 5, NextHop = "192.0.2.254", NatPrefixes = ["192.0.2.0/24"], RouteConflicts = 1 };
         Expect(proxy.RouteFingerprint(host.ProxyRoute with { OverlappingNats = null }) is null, "Unknown NAT state was treated as reviewed.");
         await lab.SetUpdateProxyAsync(machine.Id, proxy with { ReviewedRoute = proxy.RouteFingerprint(host.ProxyRoute) });
         await lab.StartAsync(machine.Id);
