@@ -48,6 +48,9 @@ jobs:
       - run: dotnet run --project src/VMCrate.Cli -c Release --no-build -- validate examples/two-node-lab.json
       - run: dotnet run --project src/VMCrate.Cli -c Release --no-build -- validate-recipes examples/recipes.json
       - run: powershell -NoProfile -NonInteractive -File tests/HyperV.Tests.ps1
+      - name: Test release publication retries
+        shell: pwsh
+        run: ./tests/Test-ReleasePublication.ps1
       - name: Parse all PowerShell scripts
         shell: pwsh
         run: |

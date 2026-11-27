@@ -15,14 +15,19 @@ if ((Get-Content -LiteralPath $manifest -Raw).TrimEnd() -cne "$hash  $zipName") 
 $files = @($zip, $manifest)
 if (Test-Path -LiteralPath "$manifest.p7s" -PathType Leaf) { $files += "$manifest.p7s" }
 
-$releases = gh release list --repo $Repository --limit 100 --json tagName,isDraft | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0) { throw 'Could not list GitHub releases.' }
-$existing = $releases | Where-Object tagName -CEQ $Tag
-if ($existing -and -not $existing.isDraft) {
+function Read-CrateRelease {
+    $matching = @(gh api "repos/$Repository/releases?per_page=100" | ConvertFrom-Json |
+        Where-Object tag_name -CEQ $Tag)
+    if ($LASTEXITCODE -ne 0 -or $matching.Count -gt 1) { throw 'Could not identify the GitHub release.' }
+    if ($matching.Count -eq 1) { $matching[0] }
+}
+
+$release = Read-CrateRelease
+if ($release -and -not $release.draft) {
     Write-Output "Release $Tag is already published."
     return
 }
-if (-not $existing) {
+if (-not $release) {
     $options = @('--repo', $Repository, '--verify-tag', '--draft', '--title', "VMCrate $Tag")
     $notes = Join-Path $PSScriptRoot "../docs/releases/$Tag.md"
     if (Test-Path -LiteralPath $notes -PathType Leaf) { $options += @('--notes-file', $notes) }
@@ -30,11 +35,13 @@ if (-not $existing) {
     if ($Tag.Contains('-')) { $options += '--prerelease' }
     gh release create $Tag @options
     if ($LASTEXITCODE -ne 0) { throw 'Could not create the GitHub release draft.' }
+    for ($attempt = 0; $attempt -lt 8 -and -not $release; $attempt++) {
+        if ($attempt -gt 0) { Start-Sleep -Seconds 2 }
+        $release = Read-CrateRelease
+    }
 }
 
-$release = gh api "repos/$Repository/releases?per_page=100" | ConvertFrom-Json |
-    Where-Object tag_name -CEQ $Tag
-if ($LASTEXITCODE -ne 0 -or -not $release.draft -or $release.prerelease -ne $Tag.Contains('-')) {
+if (-not $release.draft -or $release.prerelease -ne $Tag.Contains('-')) {
     throw 'The release draft or its release channel could not be verified.'
 }
 $expectedNames = @($files | ForEach-Object { Split-Path -Leaf $_ })
@@ -50,8 +57,15 @@ foreach ($file in $files) {
         if ($LASTEXITCODE -ne 0) { throw "Could not upload $name." }
     }
 }
-$uploaded = gh api "repos/$Repository/releases/$($release.id)/assets" | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0 -or @($uploaded).Count -ne $files.Count) { throw 'The complete release assets are unavailable.' }
+for ($attempt = 0; $attempt -lt 8; $attempt++) {
+    if ($attempt -gt 0) { Start-Sleep -Seconds 2 }
+    $uploaded = @(gh api "repos/$Repository/releases/$($release.id)/assets" | ConvertFrom-Json)
+    if ($LASTEXITCODE -ne 0 -or $uploaded.Count -gt $files.Count) { throw 'Could not verify uploaded assets.' }
+    if ($uploaded.Count -eq $files.Count -and -not ($uploaded | Where-Object { $_.state -ne 'uploaded' -or -not $_.digest })) {
+        break
+    }
+}
+if ($uploaded.Count -ne $files.Count) { throw 'The complete release assets are unavailable.' }
 foreach ($file in $files) {
     $name = Split-Path -Leaf $file
     $asset = $uploaded | Where-Object name -CEQ $name
