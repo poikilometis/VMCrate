@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 
@@ -10,6 +11,14 @@ public sealed partial class LabService
         using var workspaceLock = store.Lock();
         var state = store.Load();
         var (machine, proxy) = ProxyBuilder(state, id);
+        var started = Stopwatch.GetTimestamp();
+        var trace = await MeasureHostProxyAsync(state, machine, proxy);
+        RecordProxyHost(state, machine.Id, BuildProxySource.Host, trace, Elapsed(started));
+        return trace;
+    }
+
+    private async Task<ProxyHostTrace> MeasureHostProxyAsync(LabState state, Machine machine, UpdateProxy proxy)
+    {
         VmObservation? observed = null;
         try { observed = await ObserveOneAsync(store.Location(state, machine)); }
         catch (LabException) { }
@@ -17,8 +26,6 @@ public sealed partial class LabService
         var tcp = hypervisor.CheckHostProxyAsync(proxy);
         await Task.WhenAll(lookup, tcp);
         var network = await lookup;
-        RecordOperation(state, id, RecordedOperation.ProxyHost, (await tcp).ToString());
-        store.Save(state);
         return new(observed?.State ?? PowerState.Unavailable,
             observed is { State: PowerState.Off or PowerState.Running } && !observed.Findings.Contains("audit.network"),
             network, network?.Switches.SingleOrDefault(item => item.Id == proxy.SwitchId), await tcp);
@@ -48,8 +55,7 @@ public sealed partial class LabService
         var location = store.Location(state, machine);
         await RequireRunningProxyBuilderAsync(location, GuestFamily.Windows);
         var trace = await hypervisor.CheckGuestProxyAsync(location, options, user, password, proxyUser, proxyPassword);
-        RecordOperation(state, id, RecordedOperation.ProxyGuest, trace.Result.ToString());
-        store.Save(state);
+        RecordProxyGuest(state, id, trace, options.Target);
         return trace;
     }
 
@@ -98,6 +104,7 @@ public sealed partial class LabService
             .Replace("@PROXY_ADDRESS@", proxy.Address, StringComparison.Ordinal)
             .Replace("@PROXY_PORT@", proxy.Port.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
             .Replace("@RELAY_PORT@", options.RelayPort?.ToString(CultureInfo.InvariantCulture) ?? "", StringComparison.Ordinal)
+            .Replace("@MEASURE_DOWNLOAD@", options.MeasureDownload ? "1" : "0", StringComparison.Ordinal)
             .Replace("@REPOSITORY@", options.Repository.AbsoluteUri, StringComparison.Ordinal);
     }
 }

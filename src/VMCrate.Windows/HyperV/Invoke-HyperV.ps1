@@ -2,9 +2,11 @@
 param(
     [Parameter(Mandatory)]
     [ValidateSet('Observe', 'ValidateBaseDisk', 'Create', 'CaptureDisk', 'Start',
-        'PowerOff', 'ResetDisk', 'Delete', 'SetNetwork', 'SetInbox', 'EjectInstaller', 'Console',
+        'PowerOff', 'Shutdown', 'ResetDisk', 'Delete', 'SetNetwork', 'SetInbox', 'EjectInstaller', 'Console',
         'ObserveNetwork', 'ObserveIsolation', 'CheckGuestNetwork', 'CheckBoot', 'UsesMedia', 'RemoveEmptySegment', 'HostReadiness',
-        'ObserveRecovery', 'CheckGuestProxy', 'RestoreDisks', 'ArmInstallerSeed', 'CloseExpiredUpdate', 'DisplayInfo', 'ConfigurePrivateAddress', 'WindowsInventory', 'ExportWorkingDisk', 'RegisterPreparedDisk')]
+        'ObserveRecovery', 'CheckGuestProxy', 'RestoreDisks', 'ArmInstallerSeed', 'CloseExpiredUpdate', 'CloseDriftedUpdate', 'DisplayInfo',
+        'ConfigurePrivateAddress', 'WindowsInventory', 'ExportWorkingDisk', 'RegisterPreparedDisk', 'BindDiskParent', 'HostLoad',
+        'AttachOutbox', 'DetachOutbox')]
     [string]$Operation
 )
 
@@ -30,9 +32,15 @@ $ProgressPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'PrivateAddress.ps1')
 . (Join-Path $PSScriptRoot 'WindowsInventory.ps1')
 . (Join-Path $PSScriptRoot 'WorkingDiskTransfer.ps1')
+. (Join-Path $PSScriptRoot 'HostLoad.ps1')
+. (Join-Path $PSScriptRoot 'Outbox.ps1')
 
 try {
     $request = [Console]::In.ReadToEnd() | ConvertFrom-Json
+    if ($Operation -eq 'HostLoad') {
+        Write-CrateReply @{ ok = $true; data = (Get-CrateHostLoad $request) }
+        exit 0
+    }
     if ($Operation -eq 'DisplayInfo') {
         Write-CrateReply @{ ok = $true; data = (Get-CrateDisplayInfo) }
         exit 0
@@ -61,6 +69,7 @@ try {
         'ValidateBaseDisk' { Assert-CrateBaseDisk $request.path; $true }
         'Create' { New-CrateMachine $request; $true }
         'RegisterPreparedDisk' { New-CrateMachine $request -Prepared; $true }
+        'BindDiskParent' { Set-CrateCopiedDiskParent $request.disk $request.parent; $true }
         'RestoreDisks' { Restore-CrateDisks $request.changes; $true }
         default { Invoke-CrateMachineAction $Operation $request }
     }
@@ -70,7 +79,7 @@ try {
     $knownErrors = @('error.machine', 'error.foreign', 'error.off', 'error.layout',
         'error.baseDisk', 'error.isolation', 'error.network', 'error.localPath',
         'error.updateSwitch', 'error.updateAcl', 'error.updateBuilder', 'error.guestProbe',
-        'error.proxyBuilder', 'error.proxyDirect', 'error.transferState', 'error.buildSpace')
+        'error.proxyBuilder', 'error.proxyDirect', 'error.transferState', 'error.buildSpace', 'error.guestRestart', 'error.outbox')
     $code = if ($detail -in $knownErrors) { $detail } else { 'error.backend' }
     Write-CrateReply @{ ok = $false; code = $code; detail = $(if ($detail -ne $code) { $detail }) }
 }

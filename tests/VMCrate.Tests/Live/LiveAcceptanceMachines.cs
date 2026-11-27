@@ -18,6 +18,7 @@ internal static partial class LiveAcceptance
         await File.WriteAllTextAsync(source, "VMCrate live acceptance fixture");
         await BootCloneAsync(workspace, win, "Windows offline", source, credentials);
         await BootCloneAsync(workspace, kali, "Linux offline", source);
+        await CheckOutboxAsync(workspace, kali);
 
         await workspace.Lab.CreateCloneAsync(kali, new("Disposable acceptance VM", 4, 2), disposable: true);
         var session = (await workspace.Lab.ObserveAsync()).Machines.Single(vm => vm.Disposable).Id;
@@ -141,8 +142,49 @@ internal static partial class LiveAcceptance
                 "Private segment membership differs from the current Hyper-V attachments.");
         }
         await CheckGroupRecoveryAsync(workspace, blueprint.Id);
+        await CheckOfflineRestoreAsync(workspace, blueprint.Id);
         await workspace.Lab.ApplyLabOperationAsync(remove);
         Console.WriteLine("PASS private blueprint deployment, reuse and group removal");
+    }
+
+    private static async Task CheckOutboxAsync(LiveWorkspace workspace, Guid kali)
+    {
+        await workspace.Lab.CreateCloneAsync(kali, new("Outbox source", 2, 2));
+        await workspace.Lab.CreateCloneAsync(kali, new("Offline receiver", 2, 2));
+        var machines = (await workspace.Lab.ObserveAsync()).Machines;
+        var source = machines.Single(vm => vm.Name == "Outbox source");
+        var receiver = machines.Single(vm => vm.Name == "Offline receiver");
+        await workspace.Lab.StartAsync(source.Id);
+        await workspace.VerifyBootAsync(source.Id);
+        await workspace.Lab.PrepareOutboxAsync(source.Id, receiver.Id, 64);
+        var pending = workspace.Lab.ReadOutboxes().Single();
+        workspace.Reopen();
+        var received = await workspace.Lab.ReceiveOutboxAsync(pending.Id);
+        Expect(received is { Status: OutboxStatus.Received, Evidence.SizeBytes: > 0 } &&
+            received.Receiver == receiver.Id && (await workspace.ObserveAsync(source.Id)).Findings.Length == 0 &&
+            (await workspace.ObserveAsync(receiver.Id)).Findings.Length == 0, "The offline outbox handoff lost its audit.");
+        await workspace.Lab.ArchiveOutboxAsync(received.Id);
+        await workspace.Lab.PowerOffAsync(source.Id);
+        await workspace.Lab.DeleteMachineAsync(source.Id);
+        await workspace.Lab.DeleteMachineAsync(receiver.Id);
+        Console.WriteLine("PASS outbox disk hot-attach, detached SHA-256, offline receiver and archive");
+    }
+
+    private static async Task CheckOfflineRestoreAsync(LiveWorkspace workspace, string blueprintId)
+    {
+        var package = Guid.NewGuid();
+        var directory = Path.Combine(workspace.Root, package.ToString("N"));
+        var task = new LocalJobQueue(workspace.Root).Enqueue(new(LocalJobKind.Backup, Blueprint: blueprintId, Destination: directory));
+        var worker = new LocalJobWorker(workspace.Lab, new OfficialImages(new VMCrate.Windows.PublisherSignatureVerifier()));
+        await worker.RunAsync();
+        Expect(new LocalJobQueue(workspace.Root).Read().Single(item => item.Id == task.Id).Status == LocalJobStatus.Succeeded,
+            "The durable backup job did not publish its backup.");
+        var manifest = Path.Combine(directory, LabBackup.ManifestName);
+        var result = await workspace.Lab.TestLabBackupAsync(manifest);
+        Expect(result.Booted == 2 && workspace.Lab.ReadRestoreDrill(manifest) == result,
+            "The offline restore did not boot both test guests or record evidence.");
+        Console.WriteLine($"PASS verified backup and separate Offline restore with two heartbeats · {result.ElapsedMs / 1000d:N1} s");
+        LocalPaths.RemoveDirectory(workspace.Root, package);
     }
 
     private static async Task CheckGroupRecoveryAsync(LiveWorkspace workspace, string blueprintId)

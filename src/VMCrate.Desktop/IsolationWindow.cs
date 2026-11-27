@@ -55,6 +55,11 @@ internal sealed class IsolationWindow : WorkflowWindow
     {
         if (SelectedMachine is not { } vm)
             return Task.CompletedTask;
+        if (vm.Guest == GuestFamily.Linux)
+        {
+            new LinuxIsolationDialog(Text, lab, vm.Id, observation => Render(observation, vm)) { Owner = this }.ShowDialog();
+            return Task.CompletedTask;
+        }
         new IsolationGuestDialog(Text, async (user, password) =>
         {
             guest.Text = Status(null);
@@ -92,7 +97,7 @@ internal sealed class IsolationWindow : WorkflowWindow
         rows.Add(Row(Text["isolation.inbox"], Present(measured.InboxAttached)));
         host.Text = string.Join(Environment.NewLine, rows);
         RenderGuest(observation);
-        checkGuest.IsEnabled = vm.Guest == GuestFamily.Windows && observation.Profile != NetworkMode.Updates &&
+        checkGuest.IsEnabled = observation.Profile != NetworkMode.Updates &&
                                measured is { State: PowerState.Running, NetworkPolicyMatches: true };
     }
 
@@ -100,9 +105,10 @@ internal sealed class IsolationWindow : WorkflowWindow
     {
         guest.Text = observation.Guest is { } measured && observation.GuestObservedUtc is { } time
             ? string.Join(Environment.NewLine,
-                Row("PowerShell Direct", time.ToLocalTime().ToString("g")),
+                Row(observation.GuestReported ? Text["isolation.guestReport"] : "PowerShell Direct", time.ToLocalTime().ToString("g")),
                 Text.Format("isolation.routes", measured.ActiveAdapters, Count(measured.IPv4DefaultRoutes),
                     Count(measured.IPv6DefaultRoutes), Count(measured.DnsServers)),
+                Row(Text["isolation.network"], Status(observation.DefaultRouteCheck)),
                 Row(Text["isolation.inbox"], Present(measured.InboxReadable)))
             : Row(Text["action.guestProbe"], Status(null));
     }

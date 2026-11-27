@@ -33,6 +33,13 @@ internal sealed class ImageCatalogWindow : WorkflowWindow
             FlowDirection = FlowDirection.LeftToRight });
         details = Note("");
         download = Action(Actions(), "images.download", DownloadAsync, true);
+        Action(Actions(), "jobs.background", async () =>
+        {
+            if (images.SelectedItem is not OfficialImage image)
+                return;
+            await Task.Run(() => LocalJobProcess.Enqueue(lab, new(LocalJobKind.Download, Publisher: image.Source.Id, Digest: image.Sha256)));
+            new LocalJobsWindow(Text, lab) { Owner = this }.ShowDialog();
+        });
         transferStatus = Note("");
         progress = new ProgressBar { Height = 7, Visibility = Visibility.Collapsed };
         Body.Children.Add(progress);

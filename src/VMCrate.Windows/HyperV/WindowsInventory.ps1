@@ -1,6 +1,7 @@
 function Get-CrateWindowsInventory($Vm, $Request) {
     $location = $Request.location
-    if ($location.machine.guest -ne 'Windows' -or -not $location.machine.templateId -or
+    if ($location.machine.guest -ne 'Windows' -or
+        (-not $location.machine.templateId -and $location.machine.transferId -ne $location.machine.id) -or
         $location.machine.disposable -or $location.machine.network -ne 'Offline' -or
         [string]$Vm.State -ne 'Running' -or -not (Test-CrateNetwork $Vm $location)) {
         throw 'error.guestProbe'

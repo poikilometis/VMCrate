@@ -80,11 +80,18 @@ public static class OfflinePlanning
         CancellationToken cancellation = default)
     {
         var plan = await PlanAsync(workspace, blueprint, cancellation: cancellation);
-        if (!plan.Ready)
+        var pins = Pin(blueprint, plan);
+        await OutputFile.WriteNewAsync(path, ".json", stream => JsonSerializer.SerializeAsync(stream, pins, JsonDefaults.Options, cancellation));
+    }
+
+    public static BlueprintLock Pin(LabBlueprint blueprint, OfflineBlueprintPlan plan)
+    {
+        if (!plan.Ready || plan.Id != blueprint.Id)
             throw new LabException("error.projectIntegrity");
         var pins = new BlueprintLock(1, Fingerprint(blueprint),
             plan.Templates.Select(item => new PinnedTemplate(item.Name, item.Revision, item.Sha256!, item.Bytes!.Value)).ToArray());
-        await OutputFile.WriteNewAsync(path, ".json", stream => JsonSerializer.SerializeAsync(stream, pins, JsonDefaults.Options, cancellation));
+        ValidateLock(blueprint, pins);
+        return pins;
     }
 
     public static void ValidateLock(LabBlueprint blueprint, BlueprintLock pins)

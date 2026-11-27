@@ -27,6 +27,13 @@ state.json
 session-profiles.json
 state.previous.json
 state.failed-*.json
+state.before.json
+state.replaced.json
+app-updates/
+restore-drills/
+restore-checks/
+outbox/
+*.copying
 workspace-location.json
 *.download.lock
 *.partial

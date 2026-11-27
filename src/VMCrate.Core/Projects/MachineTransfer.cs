@@ -86,34 +86,8 @@ public sealed partial class LabService
 
         var machine = NewMachine(state, new(name, transfer.MemoryGiB, transfer.CpuCount), transfer.Guest,
             transfer.SecureBoot, templateId: null) with { TransferId = transfer.Id };
-        var location = store.Location(state, machine);
         var incoming = LocalPaths.RequireFile(Path.Combine(Path.GetDirectoryName(source)!, MachineTransfer.DiskName), ".vhdx");
-        if (new FileInfo(incoming).Length != transfer.Bytes)
-            throw new LabException("error.projectIntegrity");
-        WorkspaceCapacity.RequireSpace(store.Root, transfer.Bytes);
-        var fileId = Guid.NewGuid();
-        var disk = Path.Combine(location.DiskDirectory, $"{fileId:N}.vhdx");
-        var operation = new PendingProvision(machine.Id, null, 0, new(fileId, transfer.Sha256, transfer.Bytes));
-        try
-        {
-            LocalPaths.MakeDirectory(location.DiskDirectory);
-            var hash = await FileDigests.CopyAndHashAsync(incoming, disk, progress, cancellation);
-            if (!hash.Equals(transfer.Sha256, StringComparison.OrdinalIgnoreCase) || new FileInfo(disk).Length != transfer.Bytes)
-                throw new LabException("error.projectIntegrity");
-            await hypervisor.ValidateBaseDiskAsync(disk);
-            cancellation.ThrowIfCancellationRequested();
-
-            state.Machines.Add(machine);
-            state.Provisions.Add(operation);
-            store.Save(state);
-        }
-        catch
-        {
-            LocalPaths.RemoveDirectory(store.Machines, machine.Id);
-            throw;
-        }
-
-        await FinishProvisionAsync(state, location, operation);
+        await ProvisionPreparedDiskAsync(state, machine, incoming, transfer.Sha256, transfer.Bytes, progress, cancellation);
         return machine.Id;
     }
 }

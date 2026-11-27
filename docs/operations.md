@@ -1,10 +1,12 @@
 # Host and lab operations
 
-The workflows are available under **Lab tools**. VMCrate reads workspace schemas 1–7 and writes schema 7 on the next change. The previous catalog is retained as part of the existing workspace backup workflow.
+The workflows are available under **Lab tools**. VMCrate reads workspace schemas 1–8 and writes schema 8 on the next change. Each catalog update retains the previous copy for workspace recovery.
 
 ## Choose a workspace
 
 At first launch, select a local folder with enough space for installation images and virtual disks. Check the reported Hyper-V and Windows Sandbox status. Opening an existing workspace requires selecting the folder that already contains its catalog. To reopen the status panel, choose **Workspace setup** under **Lab tools**.
+
+Open **First VM** to see host readiness and available templates. Import a standalone Generation 2 VHDX or open the image catalog and complete the template build from the same wizard. Choose **Create and start Offline VM** to set its name and resources and open its console. If the start or console step fails, use **Continue to console** to retry the created VM. **Console and inbox** can reconnect a console opened by VMCrate or request a guest shutdown and restart for a running regular VM.
 
 ## Find and verify official media
 
@@ -56,7 +58,9 @@ Configure the guest address, prefix and gateway for that existing network. Confi
 
 From a builder in Updates proxy mode, open **Proxy diagnostics**. **Check host path** reports the selected host interface, VPN indication, internal switch, overlapping routes, Hyper-V proxy policy and TCP reachability. For the guest check, start the builder and pick an HTTPS repository. An optional local relay port checks an HTTP relay at 127.0.0.1, such as a relay configured inside the guest.
 
-For Windows, enter the guest credentials for PowerShell Direct and supply proxy credentials if required. You can store validated proxy credentials for the configured endpoint in Windows Credential Manager and load them for another test. For Linux, choose **Mount Linux probe**, open VMConnect and run `bash VMCrate-proxy.sh` from the mounted read-only inbox. Run it in an interactive terminal when using upstream proxy credentials. Enter the `VMCRATE_PROXY1` result line in the diagnostic window. Review the guest route and neighbor state, direct and relay TCP, CONNECT status and the repository response. Run the host check again after changing the connection to compare the selected route to the previous observation in the window. The diagnostic sends a single HTTPS HEAD request through the configured proxy. [PowerShell Direct](https://learn.microsoft.com/windows-server/virtualization/hyper-v/powershell-direct)
+For Windows, enter the guest credentials for PowerShell Direct and supply proxy credentials if required. You can store validated proxy credentials for the configured endpoint in Windows Credential Manager and load them for another test. For Linux, choose **Mount Linux probe**, open VMConnect and run `bash VMCrate-proxy.sh` from the mounted read-only inbox. Enter the `VMCRATE_PROXY2` result line in the diagnostic window. Older `VMCRATE_PROXY1` lines also work. Run the probe in an interactive terminal when using upstream proxy credentials. Review the guest route, neighbor state, direct and relay TCP, CONNECT status and repository response. [PowerShell Direct](https://learn.microsoft.com/windows-server/virtualization/hyper-v/powershell-direct)
+
+Starting or continuing a builder with Updates Proxy enabled records a host path check in **Build diagnostics**. The window compares recent comparable checks, preferring a previous successful result. It flags a changed host route and keeps submitted guest results with the build. Choose **Measure a download sample** for the Kali, Debian or Ubuntu repository. The sample includes the proxy and TLS connection time.
 
 ## Manage a lab
 
@@ -70,11 +74,37 @@ Create ordinary clones for persistent work. Stop the VM and choose **Recovery po
 
 A recovery point captures working disks. Full VM exports require separate handling for firmware, virtual TPM and memory state. In **Template revisions**, verify the selected revision before creating Offline trial copies of ordinary clones. Use the advisor to compare two package inventories for the same ecosystem. **Collect Windows updates** reads the OS build and installed CBS hotfix IDs from a running Offline clone through PowerShell Direct. Use that inventory for a local comparison. For a Linux template, open **Collect Linux packages** and mount the collector on an Offline clone. Run the displayed command at the actual DVD mount point. It writes version 1 JSON from the local package database. Provide that JSON to **Compare inventories** through your lab’s reviewed evidence process. The collector uses no guest network or reverse file-share integration. Debian stable and Ubuntu LTS use source package names and versions for the matching OSV feeds. Kali, RPM-based distributions, Alpine and Arch use local comparisons. [OSV ecosystems](https://ossf.github.io/osv-schema/#affectedpackage-field) [Microsoft Get-HotFix](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/get-hotfix)
 
+## Test an update in a new revision
+
+1. In **Template revisions**, choose a source revision and select **Start an update trial**. Continue the queued job to make a verified standalone copy of its VHDX.
+2. Boot the trial VM Offline and collect a baseline inventory. Update packages inside the trial VM using the existing update proxy workflow if needed. Return to Offline for the second inventory. Use **Template update advisor** from the build to compare inventories. **Compare packages and OSV advisories** queries supported ecosystems after review. Use the local comparison for Kali or Windows CBS inventories.
+3. Finish the build, shut down the guest, capture the candidate and run the Offline clone boot test. In **Template revisions**, choose **Prefer for new VMs** for the verified candidate. Existing VMs and blueprints keep their revision pins.
+
+## Back up and restore a lab
+
+Shut down all VMs in a deployed lab and choose **Lab tools → Lab backup**. Select the lab and an output folder. VMCrate writes a new directory containing `lab-backup.json`, the working disks and their required template disks. Keep the directory together when moving it to another Hyper-V host.
+
+In the destination workspace, choose **Verify and preview backup** and open `lab-backup.json`. The preview lists the machines and templates, checks SHA-256 and shows available disk space. Resolve any name conflicts in the destination before restoring. **Restore lab** registers stopped VMs and recreates the private segments with identities for that workspace. Retry the same backup after an interruption to resume pending registrations. Restored VMs get new firmware and TPM identities. Retain recovery keys for encrypted guests.
+
+Choose **Test Offline restore** to restore and boot the VMs one by one in a temporary workspace. The test disconnects each VM before boot, waits for the Hyper-V heartbeat, and removes its temporary resources. **View restore test receipt** shows the tested backup, elapsed time and number of guests that booted. A heartbeat verifies boot and the host network profile. Check application data separately inside the guest when testing its recovery.
+
+## Monitor work and plan resources
+
+**Home** shows the next action for the current build or recently used VM, and links to the operation journal. Run ISO downloads, SHA-256 checks, template build stages and backups in **Background jobs**. The local worker persists job status and resumes interrupted work the next time VMCrate opens. Retry a failed copy to verify and reuse its saved prefix. The **Resource planner** shows host CPU load, sampled disk latency, working space and each queued build's CPU, memory and disk estimates.
+
+## Move selected files out of a guest
+
+From **Clean session** or **Lab tools**, open **Guest outbox** and select a distinct persistent Offline receiver. Prepare a small secondary VHDX. In the source guest, initialize and format just that new disk, then copy the files you choose. You can attach a tab-separated list of names, byte counts and SHA-256 hashes reported by the source guest.
+
+Unmount the disk inside the source guest before handing it off. VMCrate detaches it, records the container SHA-256 and size, and connects it to the Offline receiver. Inspect the contents and verify individual files there. **Detach and keep disk** archives the VHDX and receipt. The host treats guest filesystem contents as opaque.
+
 ## Review storage and run a clean session
 
 **Storage** shows file sizes for template disks, working disks, inboxes and cached ISOs, along with saved recovery points and free space on the workspace volume. Template rows list revisions and dependent VMs. ISO cleanup checks both build jobs and attached media before removing a cached copy.
 
 **Clean session** opens an offline disposable VM, read-only inbox, VMConnect, report export and session end controls in one window. Set the name, template, memory and processors, then use **Launch profiles → Save current settings** to reuse that configuration. Select a saved profile and choose **Save Windows shortcut** to open a prefilled clean session from Explorer. The shortcut opens a review form before VM creation. Select and stage files before start. Their recorded hashes come from the copies in the inbox. Export the report before ending the session or shutting down its guest. The app reclaims started sessions after it observes them off. Open **Console and inbox** to send a note or files on the read-only DVD, review the VMConnect host policy and check display and graphics details. In **Session report**, compare the current evidence with a saved session report.
+
+Select **Keep the VM after the session** before creating a persistent clone. **Close console** disconnects VMConnect. **Shut down guest** asks the persistent guest to stop and preserves its disk. **End session** discards the disposable VM and its disk after confirmation. The report export action displays the destination you selected.
 
 ## Prepare an offline library
 

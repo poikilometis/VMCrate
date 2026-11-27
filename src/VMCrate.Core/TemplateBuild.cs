@@ -4,10 +4,14 @@ public enum BuildStage { Verify, Provision, Install, Capture, Complete, BootTest
 
 public sealed record TemplateBuildOptions(string Name, string? Revision, InstallerOptions Installer,
     string Hash, string? AnswerFile, Guid? PreviousTemplateId = null, RevisionLink? Lineage = null,
-    MediaProvenance? Media = null, string? BootSeedHash = null, bool VerifyCloneOnPublish = false);
+    MediaProvenance? Media = null, string? BootSeedHash = null, bool VerifyCloneOnPublish = false,
+    bool RevisionTrial = false);
 
 public sealed record BuildEvent(DateTimeOffset TimeUtc, BuildStage Stage, string? ErrorKey = null, long? ElapsedMs = null);
-public sealed record TemplateBuild(Guid Id, TemplateBuildOptions Options, BuildStage Stage, BuildEvent[] History);
+public sealed record TemplateBuild(Guid Id, TemplateBuildOptions Options, BuildStage Stage, BuildEvent[] History)
+{
+    public BuildProxyObservation[] ProxyChecks { get; init; } = [];
+}
 
 public sealed partial class LabService
 {
@@ -26,6 +30,10 @@ public sealed partial class LabService
             throw new LabException("error.inUse");
         if (state.Templates.Any(template => template.Id == job.Id && !template.Published))
             throw new LabException("error.inUse");
+        var partial = Path.Combine(store.Media, $"{id:N}.copying");
+        LocalPaths.RequireOrdinaryPath(partial);
+        if (File.Exists(partial))
+            File.Delete(partial);
         state.Builds.Remove(job);
         store.Save(state);
     }
@@ -33,18 +41,37 @@ public sealed partial class LabService
     public TemplateBuild QueueBuild(TemplateBuildOptions options)
     {
         using var workspaceLock = store.Lock();
+        if (options.RevisionTrial)
+            throw new LabException("error.revision");
+        return QueueBuild(store.Load(), options);
+    }
+
+    public TemplateBuild QueueRevisionTrial(Guid sourceId, string name, string revision, MachineOptions resources)
+    {
+        using var workspaceLock = store.Lock();
         var state = store.Load();
+        var source = FindTemplate(state, sourceId);
+        RequirePublishedTemplate(source);
+        if (source.Sha256 is not { } hash || !IsSha256(hash))
+            throw new LabException("error.projectIntegrity", source.Name);
+
+        return QueueBuild(state, new(name, revision, new(resources, source.Guest, source.SecureBoot, "", 0),
+            hash, null, sourceId, Media: source.Media, VerifyCloneOnPublish: true, RevisionTrial: true));
+    }
+
+    private TemplateBuild QueueBuild(LabState state, TemplateBuildOptions options)
+    {
         var name = ValidateName(options.Name,
             state.Templates.Select(template => template.Name).Concat(state.Builds.Select(job => job.Options.Name)));
         ValidateResources(options.Installer.Machine.MemoryGiB, options.Installer.Machine.CpuCount);
-        if (options.Installer.DiskGiB is < 16 or > 2048)
+        if (!options.RevisionTrial && options.Installer.DiskGiB is < 16 or > 2048)
             throw new LabException("error.diskSize");
 
         var hash = options.Hash.Trim().ToLowerInvariant();
         if (!IsSha256(hash))
             throw new LabException("error.isoHash");
         var id = Guid.NewGuid();
-        var iso = LocalPaths.RequireFile(options.Installer.IsoPath, ".iso");
+        var iso = options.RevisionTrial ? "" : LocalPaths.RequireFile(options.Installer.IsoPath, ".iso");
         var revision = string.IsNullOrWhiteSpace(options.Revision) ? null : ValidateName(options.Revision, []);
         RevisionLink? lineage = null;
         if (options.PreviousTemplateId is Guid previousId)
@@ -64,8 +91,10 @@ public sealed partial class LabService
             ? options.BootSeedHash!.Trim().ToLowerInvariant() : null;
         var machineName = $"{name[..Math.Min(48, name.Length)]} · {id.ToString("N")[..8]}";
         var installer = options.Installer with { IsoPath = iso, Machine = options.Installer.Machine with { Name = machineName } };
-        var build = new TemplateBuild(id, new TemplateBuildOptions(name, revision, installer, hash, answer, options.PreviousTemplateId, lineage, options.Media, seedHash, options.VerifyCloneOnPublish),
-            BuildStage.Verify, [new BuildEvent(DateTimeOffset.UtcNow, BuildStage.Verify)]);
+        var stage = options.RevisionTrial ? BuildStage.Provision : BuildStage.Verify;
+        var normalized = options with { Name = name, Revision = revision, Installer = installer, Hash = hash,
+            AnswerFile = answer, Lineage = lineage, BootSeedHash = seedHash };
+        var build = new TemplateBuild(id, normalized, stage, [new BuildEvent(DateTimeOffset.UtcNow, stage)]);
         state.Builds.Add(build);
         store.Save(state);
         return build;

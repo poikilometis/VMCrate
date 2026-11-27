@@ -70,8 +70,9 @@ internal static class BuildWorkflowChecks
         Expect(space.CacheBytes == new FileInfo(iso).Length &&
             space.FullDiskGrowthBytes == space.CacheBytes + 128L * 1024 * 1024 * 1024, "Build space estimate lost a copy.");
         await CancelStageAsync(lab, job.Id, BuildStage.Verify);
-        Expect(lab.InspectStorage().Media.Count == 0 && !Directory.EnumerateFiles(Path.Combine(temp.Root, "media")).Any(),
-            "Cancelled verification left an unverified ISO.");
+        Expect(lab.InspectStorage().Media.Count == 0 &&
+            Directory.EnumerateFiles(Path.Combine(temp.Root, "media")).Single().EndsWith(".copying", StringComparison.Ordinal),
+            "Cancelled verification published unverified media or lost its resumable copy.");
         await lab.ContinueBuildAsync(job.Id);
         Expect(lab.EstimateBuildSpace(iso, job.Options.Hash, 64).CacheBytes == 0, "Cache reuse was omitted.");
         await lab.ContinueBuildAsync(job.Id);

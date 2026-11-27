@@ -33,6 +33,29 @@
     </DockPanel>
     <TabControl x:Name="WorkspaceTabs" Grid.Row="2" Padding="8" Background="{StaticResource Canvas}"
                 BorderBrush="{StaticResource Rule}">
+      <TabItem Header="{Binding [home.title]}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="8,12,8,8">
+            <Border Style="{StaticResource Surface}" Margin="0,0,0,16">
+              <StackPanel>
+                <TextBlock x:Name="ResumeTitle" Style="{StaticResource Heading}" FontSize="24" />
+                <TextBlock x:Name="ResumeDetail" Style="{StaticResource MutedText}" Margin="0,6,0,12"
+                           AutomationProperties.LiveSetting="Polite" />
+                <WrapPanel>
+                  <Button x:Name="ResumeAction" Style="{StaticResource PrimaryButton}" Click="OnResumeWork" />
+                  <Button Content="{Binding [tools.session]}" Click="OnCleanSession" />
+                  <Button Content="{Binding [jobs.title]}" Click="OnLocalJobs" />
+                  <Button Content="{Binding [resources.title]}" Click="OnResourcePlan" />
+                  <Button Content="{Binding [tools.journal]}" Click="OnOperationJournal" />
+                  <Button x:Name="ExplainFailure" Content="{Binding [ai.explain]}" Click="OnExplainFailure" />
+                </WrapPanel>
+              </StackPanel>
+            </Border>
+            <TextBlock Text="{Binding [tools.journal]}" Style="{StaticResource Heading}" Margin="0,0,0,8" />
+            <ListBox x:Name="RecentOperations" MaxHeight="184" AutomationProperties.Name="{Binding [tools.journal]}" />
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
       <TabItem Header="{Binding [tab.machines]}">
         <Grid Margin="8,12,8,8">
           <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
@@ -113,6 +136,7 @@
                   <Button x:Name="CloneButton" Style="{StaticResource PrimaryButton}" Content="{Binding [action.clone]}" Click="OnClone" />
                   <Button x:Name="DisposableButton" Content="{Binding [action.disposable]}" Click="OnDisposable" />
                   <Button Content="{Binding [action.verifyTemplate]}" Click="OnVerifyTemplate" />
+                  <Button Content="{Binding [jobs.background]}" Click="OnVerifyInBackground" />
                   <Button Content="{Binding [tools.revisions]}" Click="OnTemplateRevisions" />
                   <Button x:Name="RemoveTemplateButton" Content="{Binding [action.removeTemplate]}" Click="OnRemoveTemplate" />
                 </WrapPanel>
@@ -125,6 +149,7 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel Margin="8,12,8,8">
             <WrapPanel Margin="0,0,0,4">
+              <Button Content="{Binding [first.title]}" Click="OnFirstMachine" />
               <Button Content="{Binding [tools.recovery]}" Click="OnRecovery" />
               <Button Content="{Binding [tools.firstRun]}" Click="OnFirstRun" />
               <Button Content="{Binding [tools.diagnostics]}" Click="OnDiagnostics" />
@@ -135,8 +160,11 @@
               <Button Content="{Binding [recipes.title]}" Click="OnRecipes" />
               <Button Content="{Binding [tools.builds]}" Click="OnBuilds" />
               <Button Content="{Binding [tools.labs]}" Click="OnLabs" />
+              <Button Content="{Binding [backup.title]}" Click="OnLabBackup" />
               <Button Content="{Binding [tools.storage]}" Click="OnStorage" />
               <Button Content="{Binding [tools.session]}" Click="OnCleanSession" />
+              <Button Content="{Binding [outbox.title]}" Click="OnOutbox" />
+              <Button Content="{Binding [appUpdate.title]}" Click="OnAppUpdate" />
             </WrapPanel>
             <WrapPanel Margin="0,0,0,8">
               <Button Content="{Binding [tools.ai]}" Click="OnAssistantSettings" />

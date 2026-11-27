@@ -48,11 +48,15 @@ function Test-CrateExpiredProxy($Proxy) {
 }
 
 function Close-CrateExpiredUpdate($Vm, $Location) {
-    if ($Location.machine.network -ne 'Updates' -or $Location.machine.templateId -or
-        $Location.machine.disposable -or $Location.machine.blueprintId -or
-        -not (Test-CrateExpiredProxy $Location.machine.proxy)) {
+    if (-not (Test-CrateExpiredProxy $Location.machine.proxy)) {
         throw 'error.updateBuilder'
     }
+    Close-CrateDriftedUpdate $Vm $Location
+}
+
+function Close-CrateDriftedUpdate($Vm, $Location) {
+    if ($Location.machine.network -ne 'Updates' -or $Location.machine.templateId -or
+        $Location.machine.disposable -or $Location.machine.blueprintId) { throw 'error.updateBuilder' }
     $adapters = @(Get-VMNetworkAdapter -VM $Vm)
     if ($adapters.Count -ne 1) { throw 'error.layout' }
     if ($adapters[0].SwitchName) {

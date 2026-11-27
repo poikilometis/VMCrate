@@ -36,13 +36,15 @@ internal sealed class FakeHypervisor : IHypervisor
     internal List<Guid> RemovedSegments { get; } = [];
 
     internal OwnedSegment[] Segments { get; set; } = [];
+    internal HostNetworkObservation ProxyRoute { get; set; } = new(true, "fixture tunnel", true, [], 1, false, "192.0.2.1", 24);
+    internal ProbeCheck HostProxyTcp { get; set; } = ProbeCheck.Passed;
 
     public Task<RecoveryInventory> ObserveRecoveryAsync(Guid workspaceId) =>
         Task.FromResult(new RecoveryInventory(Machines.Values.Where(vm => vm.Location.WorkspaceId == workspaceId)
             .Select(vm => vm.Location.Machine.Id).ToArray(), Segments));
 
     public Task<HostNetworkObservation> ObserveNetworkAsync(string? proxyAddress) =>
-        Task.FromResult(new HostNetworkObservation(true, "fixture tunnel", true, [], 1, false, "192.0.2.1", 24));
+        Task.FromResult(ProxyRoute);
 
     internal Guid[] IsolationPeers { get; private set; } = [];
     internal Action? GuestNetworkObserved { get; set; }
@@ -76,7 +78,7 @@ internal sealed class FakeHypervisor : IHypervisor
         return Task.CompletedTask;
     }
 
-    public Task<ProbeCheck> CheckHostProxyAsync(UpdateProxy proxy) => Task.FromResult(ProbeCheck.Passed);
+    public Task<ProbeCheck> CheckHostProxyAsync(UpdateProxy proxy) => Task.FromResult(HostProxyTcp);
 
     public Task<ProxyGuestTrace> CheckGuestProxyAsync(MachineLocation location, ProxyTraceOptions options,
         string user, string password, string proxyUser, string proxyPassword) =>
@@ -129,12 +131,36 @@ internal sealed class FakeHypervisor : IHypervisor
         return Task.CompletedTask;
     }
 
+    public Task BindDiskParentAsync(string disk, string parent)
+    {
+        Checks.Expect(File.Exists(disk) && File.Exists(parent), "Expected both disks for a restored chain.");
+        return Task.CompletedTask;
+    }
+
     public Task<string> GetCaptureDiskAsync(MachineLocation location) => Task.FromResult(Find(location).Disk);
     public Task StartAsync(MachineLocation location) => FailStart
         ? throw new LabException("error.backend")
         : Update(location, vm => vm with { Power = PowerState.Running });
     public Task PowerOffAsync(MachineLocation location) => Update(location, vm => vm with { Power = PowerState.Off });
+    internal int GuestShutdowns { get; private set; }
+    public Task ShutdownAsync(MachineLocation location)
+    {
+        GuestShutdowns++;
+        return Update(location, vm => vm with { Power = PowerState.Off });
+    }
     public Task OpenConsoleAsync(MachineLocation location) => Task.CompletedTask;
+    public Task ReconnectConsoleAsync(MachineLocation location) => Task.CompletedTask;
+    public Task CloseDriftedUpdateAsync(MachineLocation location) => CloseExpiredUpdateAsync(location);
+    public Task CloseConsoleAsync(MachineLocation location) => Task.CompletedTask;
+    public Task AttachOutboxAsync(MachineLocation location, long createBytes)
+    {
+        var path = location.OutboxDisk ?? throw new LabException("error.outbox");
+        if (createBytes > 0 && !File.Exists(path))
+            File.WriteAllText(path, "outbox disk fixture");
+        return Update(location, vm => vm with { Location = location });
+    }
+    public Task DetachOutboxAsync(MachineLocation location) => Machines.ContainsKey(location.Machine.Id)
+        ? Update(location, vm => vm with { Location = location with { OutboxDisk = null } }) : Task.CompletedTask;
     public Task ArmInstallerSeedAsync(MachineLocation location, string isoPath) => SetInboxAsync(location, isoPath);
     public Task EjectInstallerAsync(MachineLocation location) => Update(location, vm => vm with { Installer = null });
     public Task SetInboxAsync(MachineLocation location, string? isoPath) =>

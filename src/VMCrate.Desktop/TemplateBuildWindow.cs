@@ -12,12 +12,14 @@ internal sealed class TemplateBuildWindow : WorkflowWindow
     private readonly TextBlock transfer;
     private readonly ProgressBar progress;
     private readonly ListBox history;
-    private readonly Button advance, start, console, powerOff, eject, updates, trace, forget;
+    private readonly Button advance, enqueue, start, console, powerOff, eject, updates, trace, forget, inventory;
+    private readonly Guid? initialJob;
     private LabSnapshot? snapshot;
 
-    internal TemplateBuildWindow(Labels text, LabService lab) : base(text, "tools.builds")
+    internal TemplateBuildWindow(Labels text, LabService lab, Guid? initialJob = null) : base(text, "tools.builds")
     {
         this.lab = lab;
+        this.initialJob = initialJob;
         jobs = Field("tools.builds", new ComboBox { DisplayMemberPath = "Name" });
         detail = Note("");
         var setup = Actions();
@@ -29,13 +31,16 @@ internal sealed class TemplateBuildWindow : WorkflowWindow
             await RefreshAsync();
         });
         advance = Action(setup, "action.continue", AdvanceAsync, true);
+        enqueue = Action(setup, "jobs.background", QueueAsync);
         Action(setup, "action.refresh", RefreshAsync);
         forget = Action(setup, "action.forgetBuild", ForgetAsync);
-        Action(setup, "ai.explain", () =>
+        Action(setup, "build.checkHistory", async () =>
         {
             if (Selected is { } job)
-                AssistantWindow.Explain(this, Text, "Explain the recorded stages and latest template build result", DiagnosticFacts.Build(job));
-            return Task.CompletedTask;
+            {
+                new BuildDiagnosticsWindow(Text, lab, job.Id) { Owner = this }.ShowDialog();
+                await RefreshAsync();
+            }
         });
         var vm = Actions();
         start = Action(vm, "action.start", () => UseBuilderAsync(lab.StartAsync));
@@ -44,6 +49,7 @@ internal sealed class TemplateBuildWindow : WorkflowWindow
         eject = Action(vm, "action.ejectInstaller", () => UseBuilderAsync(lab.EjectBuildMediaAsync));
         updates = Action(vm, "tools.updates", ShowUpdatesAsync);
         trace = Action(vm, "tools.proxyTrace", ShowTraceAsync);
+        inventory = Action(vm, "tools.advisor", ShowTrialInventoryAsync);
         transfer = Note("");
         progress = new ProgressBar { Height = 8, Visibility = Visibility.Collapsed };
         Body.Children.Add(progress);
@@ -58,7 +64,7 @@ internal sealed class TemplateBuildWindow : WorkflowWindow
 
     private async Task RefreshAsync()
     {
-        var id = Selected?.Id;
+        var id = Selected?.Id ?? initialJob;
         var data = await Task.Run(async () => (Jobs: lab.ReadBuilds(), Snapshot: await lab.ObserveAsync()));
         snapshot = data.Snapshot;
         var items = data.Jobs.Select(job => new JobItem(job, job.Options.Name)).ToArray();
@@ -73,7 +79,13 @@ internal sealed class TemplateBuildWindow : WorkflowWindow
         var vm = Builder;
         var state = vm is null ? PowerState.Missing : snapshot!.StateOf(vm.Id);
         var install = stage is BuildStage.Install or BuildStage.Capture;
-        detail.Text = stage is null ? "" : Text["build." + stage];
+        var trial = Selected?.Options.RevisionTrial == true;
+        detail.Text = stage is null ? "" : Text[trial && stage == BuildStage.Install ? "revision.trialInstall" : "build." + stage];
+        if (trial && stage == BuildStage.Provision && Selected?.Options.PreviousTemplateId is Guid sourceId &&
+            snapshot?.Templates.SingleOrDefault(item => item.Id == sourceId) is { } source)
+            detail.Text = Text.Format("revision.trialHint", source.Name);
+        if (Selected?.ProxyChecks.LastOrDefault() is { } recent)
+            detail.Text += Environment.NewLine + BuildDiagnosticsWindow.Summary(Text, recent);
         history.ItemsSource = Selected?.History.Reverse().Select(item =>
             $"{item.TimeUtc.ToLocalTime():g} · {Text["build." + item.Stage]}" +
             (item.ErrorKey is null ? "" : " · " + Text[item.ErrorKey])).ToArray();
@@ -87,11 +99,29 @@ internal sealed class TemplateBuildWindow : WorkflowWindow
         };
         forget.IsEnabled = stage is not null && (stage == BuildStage.Complete || vm is null);
         start.IsEnabled = stage == BuildStage.Install && state == PowerState.Off;
+        enqueue.IsEnabled = advance.IsEnabled && stage is BuildStage.Verify or BuildStage.Provision or BuildStage.Capture or BuildStage.BootTest;
         console.IsEnabled = install && state == PowerState.Running;
         powerOff.IsEnabled = install && state is PowerState.Running or PowerState.Saved;
-        eject.IsEnabled = stage == BuildStage.Install && state is PowerState.Off or PowerState.Running;
+        eject.IsEnabled = !trial && stage == BuildStage.Install && state is PowerState.Off or PowerState.Running;
         updates.IsEnabled = install && state == PowerState.Off;
         trace.IsEnabled = vm?.Network == NetworkMode.Updates && state is PowerState.Off or PowerState.Running;
+        inventory.IsEnabled = trial;
+    }
+
+    private async Task QueueAsync()
+    {
+        if (Selected is not { } job)
+            return;
+        await Task.Run(() => LocalJobProcess.Enqueue(lab, new(LocalJobKind.Build, job.Id, job.Stage)));
+        new LocalJobsWindow(Text, lab) { Owner = this }.ShowDialog();
+    }
+
+    private Task ShowTrialInventoryAsync()
+    {
+        if (Selected is { Options: { RevisionTrial: true, PreviousTemplateId: Guid sourceId } } job &&
+            snapshot?.Templates.SingleOrDefault(item => item.Id == sourceId) is { } source)
+            new UpdateAdvisorWindow(Text, lab, [source], job.Id) { Owner = this }.ShowDialog();
+        return Task.CompletedTask;
     }
 
     private async Task CatalogAsync()
@@ -125,7 +155,8 @@ internal sealed class TemplateBuildWindow : WorkflowWindow
         transfer.Text = "";
         try
         {
-            if (job.Stage is BuildStage.Verify or BuildStage.Capture or BuildStage.BootTest)
+            if (job.Stage is BuildStage.Verify or BuildStage.Capture or BuildStage.BootTest ||
+                (job.Options.RevisionTrial && job.Stage == BuildStage.Provision))
                 await WithCancellationAsync(token => AdvanceFileStageAsync(job.Id, token));
             else
                 await Task.Run(() => lab.ContinueBuildAsync(job.Id));
@@ -163,11 +194,13 @@ internal sealed class TemplateBuildWindow : WorkflowWindow
     private Task PowerOffAsync() => Builder is { } vm && Text.Confirm(this, "confirm.powerOff", vm.Name)
         ? UseBuilderAsync(lab.PowerOffAsync) : Task.CompletedTask;
 
-    private Task ShowTraceAsync()
+    private async Task ShowTraceAsync()
     {
         if (Builder is { Network: NetworkMode.Updates } vm)
+        {
             new ProxyTraceWindow(Text, lab, vm) { Owner = this }.ShowDialog();
-        return Task.CompletedTask;
+            await RefreshAsync();
+        }
     }
 
     private async Task ShowUpdatesAsync()
@@ -183,8 +216,8 @@ internal sealed class TemplateBuildWindow : WorkflowWindow
     {
         if (Builder is { } vm)
         {
-            await Task.Run(() => operation(vm.Id));
-            await RefreshAsync();
+            try { await Task.Run(() => operation(vm.Id)); }
+            finally { await RefreshAsync(); }
         }
     }
 

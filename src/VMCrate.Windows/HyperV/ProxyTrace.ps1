@@ -10,10 +10,12 @@ function Get-CrateGuestProxy($Vm, $Request) {
         $credential = [Management.Automation.PSCredential]::new([string]$Request.user, $secure)
         $parameters = @(
             [string]$location.machine.proxy.address, [int]$location.machine.proxy.port,
-            [int]$Request.relayPort, [string]$Request.repository, [string]$Request.proxyUser, [string]$Request.proxyPassword
+            [int]$Request.relayPort, [string]$Request.repository, [string]$Request.proxyUser, [string]$Request.proxyPassword,
+            [bool]$Request.measureDownload, [int]$Request.sampleLimit
         )
         $result = Invoke-Command -VMId $Vm.Id -Credential $credential -ArgumentList $parameters -ScriptBlock {
-            param([string]$Address, [int]$Port, [int]$Relay, [string]$Repository, [string]$ProxyUser, [string]$ProxyPassword)
+            param([string]$Address, [int]$Port, [int]$Relay, [string]$Repository, [string]$ProxyUser,
+                [string]$ProxyPassword, [bool]$MeasureDownload, [int]$SampleLimit)
             $ErrorActionPreference = 'Stop'
 
             function Test-ProxyPort([string]$IP, [int]$Number) {
@@ -62,7 +64,8 @@ function Get-CrateGuestProxy($Vm, $Request) {
             $info.RedirectStandardInput = $true
             $info.RedirectStandardOutput = $true
             $info.RedirectStandardError = $true
-            $info.Arguments = '-q --config - --proxy "{0}" --noproxy "" --proto "=https" --head --silent --output NUL --connect-timeout 5 --max-time 15 --write-out "%{{http_connect}} %{{http_code}}" "{1}"' -f $endpoint, $Repository
+            $mode = if ($MeasureDownload) { '--range 0-{0} --max-filesize {1}' -f ($SampleLimit - 1), $SampleLimit } else { '--head' }
+            $info.Arguments = '-q --config - --proxy "{0}" --noproxy "" --proto "=https" {1} --silent --output NUL --connect-timeout 5 --max-time 15 --write-out "%{{http_connect}} %{{http_code}} %{{size_download}} %{{time_total}}" "{2}"' -f $endpoint, $mode, $Repository
             $process = [Diagnostics.Process]::new()
             $process.StartInfo = $info
             try {
@@ -76,19 +79,23 @@ function Get-CrateGuestProxy($Vm, $Request) {
                 $process.StandardInput.Close()
                 $connect = 0
                 $http = 0
+                $bytes = 0
+                $elapsed = 0
                 $exitCode = 28
                 if ($process.WaitForExit(18000)) {
                     $exitCode = $process.ExitCode
-                    if ($output.Result -match '^(\d{3}) (\d{3})$') {
+                    if ($output.Result -match '^(\d{3}) (\d{3}) (\d+) (\d+(?:\.\d+)?)$') {
                         $connect = [int]$Matches[1]
                         $http = [int]$Matches[2]
+                        $bytes = [Math]::Min([long]$Matches[3], $SampleLimit)
+                        $elapsed = [long](1000 * [decimal]::Parse($Matches[4], [Globalization.CultureInfo]::InvariantCulture))
                     }
                 } else {
                     $process.Kill()
                 }
                 @{
                     route = $route; gateway = $gateway; proxyTcp = $proxyTcp; relayTcp = $relayTcp
-                    connect = $connect; http = $http; curlExit = $exitCode
+                    connect = $connect; http = $http; curlExit = $exitCode; downloadBytes = $bytes; elapsedMs = $elapsed
                 }
             } finally {
                 $process.Dispose()
@@ -100,6 +107,7 @@ function Get-CrateGuestProxy($Vm, $Request) {
             proxyTcp = @('Unknown', 'Passed', 'Failed')[[int]$result.proxyTcp]
             relayTcp = @('Unknown', 'Passed', 'Failed')[[int]$result.relayTcp]
             connect = $result.connect; http = $result.http; curlExit = $result.curlExit
+            downloadBytes = $result.downloadBytes; elapsedMs = $result.elapsedMs
         }
     } catch {
         # Remoting errors can include submitted arguments. Keep credentials out of diagnostics.

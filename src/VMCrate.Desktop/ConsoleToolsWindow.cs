@@ -36,13 +36,24 @@ internal sealed class ConsoleToolsWindow : WorkflowWindow
         }
 
         var actions = Actions();
-        Action(actions, "action.console", async () =>
+        async Task ConnectAsync(bool reconnect)
         {
             await RefreshAsync();
             if (last is { State: PowerState.Running } &&
                 (last.EnhancedSessionAllowed != true || Text.Confirm(this, "confirm.console")))
-                await Task.Run(() => lab.OpenConsoleAsync(machine.Id));
-        }, primary: true);
+                await Task.Run(() => reconnect ? lab.ReconnectConsoleAsync(machine.Id) : lab.OpenConsoleAsync(machine.Id));
+        }
+        Action(actions, "action.console", () => ConnectAsync(false), primary: true);
+        Action(actions, "console.reconnect", () => ConnectAsync(true));
+        if (!machine.Disposable)
+            Action(actions, "console.restart", async () =>
+            {
+                await RefreshAsync();
+                if (last?.State != PowerState.Running || !Text.Confirm(this, "confirm.guestRestart", machine.Name))
+                    return;
+                await Task.Run(() => lab.RestartGuestAsync(machine.Id));
+                await RefreshAsync();
+            });
         Action(actions, "action.send", async () =>
         {
             var draft = input.Text;

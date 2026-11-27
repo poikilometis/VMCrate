@@ -11,10 +11,12 @@ internal sealed class ProxyTraceWindow : WorkflowWindow
     private readonly Machine vm;
     private readonly ComboBox target;
     private readonly TextBox relay;
+    private readonly CheckBox measure;
     private readonly TextBlock host, guest;
     private ProxyHostTrace? lastHost;
     private DateTimeOffset? lastHostAt;
     private ProxyGuestTrace? lastGuest;
+    private ProxyTarget? mountedTarget;
 
     internal ProxyTraceWindow(Labels text, LabService lab, Machine vm) : base(text, "tools.proxyTrace", 740, 760)
     {
@@ -26,6 +28,10 @@ internal sealed class ProxyTraceWindow : WorkflowWindow
             new TargetChoice(key, $"{key} · {new ProxyTraceOptions(key).Repository.Host}")).ToArray();
         target.SelectedValue = vm.Guest == GuestFamily.Windows ? ProxyTarget.WindowsUpdate : ProxyTarget.Kali;
         relay = Field("trace.relayPort", new TextBox { MaxLength = 5, FlowDirection = FlowDirection.LeftToRight });
+        measure = new CheckBox { Content = Text["trace.measure"], Margin = new Thickness(0, 6, 0, 6) };
+        Body.Children.Add(measure);
+        measure.IsEnabled = Options().CanMeasureDownload;
+        target.SelectionChanged += (_, _) => measure.IsEnabled = Options().CanMeasureDownload;
         Action(Actions(), "trace.checkHost", CheckHostAsync);
         host = Note("");
         guest = vm.Guest == GuestFamily.Windows ? AddWindowsProbe() : AddLinuxProbe();
@@ -38,7 +44,7 @@ internal sealed class ProxyTraceWindow : WorkflowWindow
     }
 
     private ProxyTraceOptions Options() => new((ProxyTarget)target.SelectedValue,
-        string.IsNullOrWhiteSpace(relay.Text) ? null : Integer(relay.Text));
+        string.IsNullOrWhiteSpace(relay.Text) ? null : Integer(relay.Text), measure.IsEnabled && measure.IsChecked == true);
 
     private async Task CheckHostAsync()
     {
@@ -112,6 +118,7 @@ internal sealed class ProxyTraceWindow : WorkflowWindow
             var options = Options();
             await CheckHostAsync();
             await Task.Run(() => lab.AttachLinuxProxyProbeAsync(vm.Id, options));
+            mountedTarget = options.Target;
             guest.Text = Text["trace.probeMounted"];
         }, true);
         Action(actions, "action.console", async () =>
@@ -124,7 +131,7 @@ internal sealed class ProxyTraceWindow : WorkflowWindow
         Action(Actions(), "trace.readResult", async () =>
         {
             var trace = ProxyGuestTrace.Parse(result.Text);
-            await Task.Run(() => lab.RecordGuestProxy(vm.Id, trace));
+            await Task.Run(() => lab.RecordGuestProxy(vm.Id, trace, mountedTarget));
             ShowResult(trace);
         });
         return Note("");
@@ -136,6 +143,8 @@ internal sealed class ProxyTraceWindow : WorkflowWindow
         guest.Text = string.Join(Environment.NewLine, Text["trace.result." + result.Result],
         Text.Format("trace.guestPath", Check(result.Route), Check(result.Gateway), Check(result.ProxyTcp), Check(result.RelayTcp)),
         Text.Format("trace.codes", result.Connect, result.Http, result.CurlExit));
+        if (result.KiBPerSecond is double speed)
+            guest.Text += Environment.NewLine + Text.Format("trace.speed", speed, result.DownloadBytes);
     }
 
     private string Check(ProbeCheck check) => Text["trace.check." + check];

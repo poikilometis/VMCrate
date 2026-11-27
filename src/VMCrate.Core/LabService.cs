@@ -13,25 +13,34 @@ public sealed partial class LabService(string root, IHypervisor hypervisor, IInb
     private async Task<LabSnapshot> ObserveStateAsync(LabState state)
     {
         var locations = state.Machines.Select(machine => store.Location(state, machine)).ToArray();
-        var templates = state.Templates.Where(template => template.Published).ToArray();
+        var templates = state.Templates.Where(template => template.Published).OrderByDescending(template => template.Preferred).ToArray();
         var pending = state.DiskRestore is not null || state.Provisions.Count != 0 || state.Builds.Any(build => build.Stage != BuildStage.Complete);
+        var view = new LabSnapshot(templates, state.Machines, null, null, RecoverySuggested: pending)
+        {
+            Builds = state.Builds.ToArray(),
+            RecentOperations = state.Operations.TakeLast(32).Reverse().ToArray()
+        };
         try
         {
             var observed = await hypervisor.ObserveAsync(locations);
             var needsReview = observed.Machines.Any(vm => vm.State == PowerState.Missing ||
                 vm.Findings.Contains("audit.network") || vm.Findings.Contains("audit.disk"));
-            return new LabSnapshot(templates, state.Machines, observed, null, RecoverySuggested: pending || needsReview);
+            return view with { Host = observed, RecoverySuggested = pending || needsReview };
         }
         catch (LabException error)
         {
-            return new LabSnapshot(templates, state.Machines, null, error, RecoverySuggested: pending);
+            return view with { HostError = error };
         }
     }
 
     public Task PowerOffAsync(Guid id) => WithMachineAsync(id, hypervisor.PowerOffAsync, RecordedOperation.PowerOff);
     public Task OpenConsoleAsync(Guid id) => WithMachineAsync(id, hypervisor.OpenConsoleAsync);
+    public Task ReconnectConsoleAsync(Guid id) => WithMachineAsync(id, hypervisor.ReconnectConsoleAsync);
+    public Task CloseConsoleAsync(Guid id) => WithMachineAsync(id, hypervisor.CloseConsoleAsync);
     public Task EjectInstallerAsync(Guid id) => WithMachineAsync(id, hypervisor.EjectInstallerAsync);
     public Task EjectInboxAsync(Guid id) => WithMachineAsync(id, vm => hypervisor.SetInboxAsync(vm, null), RecordedOperation.EjectInbox);
+
+    public Task ShutDownAsync(Guid id) => WithMachineAsync(id, hypervisor.ShutdownAsync, RecordedOperation.PowerOff);
 
     public Task ResetDiskAsync(Guid id) => WithMachineAsync(id, ResetDiskCoreAsync, RecordedOperation.Reset);
 
@@ -54,6 +63,8 @@ public sealed partial class LabService(string root, IHypervisor hypervisor, IInb
         var machine = FindMachine(state, id);
         if (machine.Disposable && network != NetworkMode.Offline)
             throw new LabException("error.sessionOffline");
+        if (network != NetworkMode.Offline && state.Outboxes.Any(item => item.Uses(id)))
+            throw new LabException("error.outbox");
         if (network == NetworkMode.Updates || machine.Network == NetworkMode.Updates)
             throw new LabException("error.updateBuilder");
         RequireNoDiskRestore(state, id);

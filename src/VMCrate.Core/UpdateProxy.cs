@@ -1,9 +1,12 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text.Json;
 
 namespace VMCrate.Core;
 
-public sealed record UpdateProxy(Guid SwitchId, string Address, int Port, DateTimeOffset? ExpiresUtc = null)
+public sealed record UpdateProxy(Guid SwitchId, string Address, int Port, DateTimeOffset? ExpiresUtc = null,
+    string? ReviewedRoute = null)
 {
     public static UpdateProxy Create(Guid switchId, string address, int port, DateTimeOffset? expiresUtc = null)
     {
@@ -19,6 +22,21 @@ public sealed record UpdateProxy(Guid SwitchId, string Address, int Port, DateTi
     }
 
     internal bool IsExpired(DateTimeOffset now) => ExpiresUtc is { } end && end <= now;
+
+    public string? RouteFingerprint(HostNetworkObservation? observation)
+    {
+        if (observation is not { RouteKnown: true, Interface: not null, SourceAddress: not null, OverlappingNats: not true } ||
+            observation.RouteConflicts is > 0 || observation.Switches.SingleOrDefault(item => item.Id == SwitchId) is not { Type: "Internal" } adapter)
+            return null;
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            observation.Interface, observation.SourceAddress, observation.IsTunnel, observation.PrefixLength,
+            observation.InterfaceIndex, observation.NextHop, observation.DestinationPrefix, observation.NatCount,
+            NatPrefixes = observation.NatPrefixes?.Order(StringComparer.Ordinal).ToArray(),
+            Networks = adapter.IPv4Networks.Order(StringComparer.Ordinal).ToArray()
+        });
+        return Convert.ToHexStringLower(SHA256.HashData(bytes));
+    }
 
     private static bool IsPublic(IPAddress ip)
     {
@@ -38,7 +56,7 @@ public sealed partial class LabService
     public async Task SetUpdateProxyAsync(Guid id, UpdateProxy? proxy)
     {
         if (proxy is not null)
-            proxy = UpdateProxy.Create(proxy.SwitchId, proxy.Address, proxy.Port, proxy.ExpiresUtc);
+            proxy = UpdateProxy.Create(proxy.SwitchId, proxy.Address, proxy.Port, proxy.ExpiresUtc) with { ReviewedRoute = proxy.ReviewedRoute };
 
         using var workspaceLock = store.Lock();
         var state = store.Load();
@@ -46,6 +64,9 @@ public sealed partial class LabService
         if (machine.TemplateId is not null || machine.Disposable || machine.BlueprintId is not null ||
             (proxy is null && machine.Network != NetworkMode.Updates))
             throw new LabException("error.updateBuilder");
+
+        if (proxy?.ReviewedRoute is { } reviewed && proxy.RouteFingerprint(await ReadProxyRouteAsync(proxy.Address)) != reviewed)
+            throw new LabException("error.proxyDrift");
 
         var updated = machine with
         {

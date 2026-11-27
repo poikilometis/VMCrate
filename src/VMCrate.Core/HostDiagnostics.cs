@@ -5,7 +5,8 @@ namespace VMCrate.Core;
 public sealed record HostSwitch(Guid Id, string Name, string Type, string[] IPv4Networks);
 public sealed record HostNetworkObservation(
     bool RouteKnown, string? Interface, bool? IsTunnel, HostSwitch[] Switches,
-    int? NatCount, bool? OverlappingNats, string? SourceAddress, int? PrefixLength, int? RouteConflicts = null);
+    int? NatCount, bool? OverlappingNats, string? SourceAddress, int? PrefixLength, int? RouteConflicts = null,
+    int? InterfaceIndex = null, string? NextHop = null, string? DestinationPrefix = null, string[]? NatPrefixes = null);
 
 public sealed record HostDiagnosticReport(
     DateTimeOffset CreatedUtc, bool HyperVAccessible, bool? EnhancedSession,

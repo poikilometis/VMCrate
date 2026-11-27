@@ -5,6 +5,9 @@ namespace VMCrate.Windows;
 
 public sealed partial class PowerShellHypervisor
 {
+    public Task<HostLoad> ReadHostLoadAsync(string workspace) => InvokeAsync<HostLoad>("HostLoad",
+        new { volume = Path.GetPathRoot(LocalPaths.FullPath(workspace))!.TrimEnd(Path.DirectorySeparatorChar) }, TimeSpan.FromSeconds(15));
+
     public async Task<HostReadiness> ReadHostReadinessAsync()
     {
         var windows11X64 = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000) &&

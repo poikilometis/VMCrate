@@ -18,9 +18,9 @@
 | Workflow | What VMCrate does |
 | --- | --- |
 | Templates | Find official install media, verify checksums, import Generation 2 VHDX files, and test new template revisions before publication. The wizard can generate a Kali amd64 setup disc. |
-| Isolation | Start with networking disconnected. Choose a private VM network for peers or a scoped update proxy for a builder. Send files on a read-only virtual DVD. |
-| Recovery and portability | Reset a clone, save disk recovery points for stopped VMs, export a lab kit, or copy a stopped VM's system disk to another host. |
-| Lab operations | Deploy repeatable labs from JSON blueprints, review isolation and proxy diagnostics, compare session reports, and inspect Windows and Linux update inventories. |
+| Isolation | Start with networking disconnected. Inspect Hyper-V and guest observations, use a scoped update proxy for a builder, and pass files through a read-only inbox or a separate Offline receiver. |
+| Recovery and portability | Reset a clone, capture recovery points, back up a stopped lab, and test that the backup boots in an independent Offline copy. |
+| Lab operations | Resume work from Home. Use the resource planner, durable background jobs, pinned starter recipes, and Windows and Linux update inventories. |
 | Team queue | Deploy and operate approved lab recipes on a dedicated Hyper-V host. Mutual TLS maps each operator to a separate workspace. |
 
 The interface supports 15 languages. Optional AI integrations use a signed-in CLI to draft blueprints and explain selected findings. [AI workflows](docs/assistant.md)
@@ -36,8 +36,8 @@ The interface supports 15 languages. Optional AI integrations use a signed-in CL
 ### Run your first VM
 
 1. Download the Windows x64 ZIP and its `.sha256` file from [GitHub Releases](https://github.com/poikilometis/VMCrate/releases), or [build a ZIP locally](#build-and-test). Use `Get-FileHash` to compare the ZIP's SHA-256 with the checksum file. Extract the whole package, then run `VMCrate.exe`.
-2. Choose a workspace. In **Lab tools → Official image catalog**, select an installer, or import a prepared standalone disk from **Templates → Import VHDX**. The [template workflow](docs/operations.md#build-a-versioned-template) covers installation and capture.
-3. Select a template and choose **Create VM**, then **Start VM → Open console**. Use **Clean session** for disposable work or **Reset disk** to return a stopped clone to its base template.
+2. Choose a workspace. Open **Home → First VM** to select an existing template, import a prepared Generation 2 VHDX, or build a template from an [official image](docs/operations.md#build-a-versioned-template).
+3. Choose **Create and start Offline VM**, then set its name and resources. VMCrate opens VMConnect when the VM is running. Use **Clean session** for disposable work or **Reset disk** to return a stopped clone to its base template.
 
 ## Build and test
 

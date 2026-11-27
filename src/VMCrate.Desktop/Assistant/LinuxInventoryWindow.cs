@@ -6,7 +6,7 @@ namespace VMCrate.Desktop;
 
 internal sealed class LinuxInventoryWindow : WorkflowWindow
 {
-    internal LinuxInventoryWindow(Labels text, LabService lab, Template template) : base(text, "inventory.linuxTitle", 690, 485)
+    internal LinuxInventoryWindow(Labels text, LabService lab, Template template, Guid? trial = null) : base(text, "inventory.linuxTitle", 690, 485)
     {
         Note(Text["inventory.linuxHint"]);
         var command = new TextBox
@@ -35,7 +35,7 @@ internal sealed class LinuxInventoryWindow : WorkflowWindow
         {
             var snapshot = await Task.Run(lab.ObserveAsync);
             machines.ItemsSource = snapshot.Machines.Where(vm => vm is { Disposable: false, Network: NetworkMode.Offline } &&
-                vm.TemplateId == template.Id).ToArray();
+                (vm.TemplateId == template.Id || vm.Id == trial)).ToArray();
             machines.SelectedIndex = 0;
         });
     }

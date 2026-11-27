@@ -40,7 +40,7 @@ internal sealed class UpdateProxyWindow : WorkflowWindow
         });
     }
 
-    private async Task CheckRouteAsync()
+    private async Task<HostNetworkObservation?> CheckRouteAsync()
     {
         var endpoint = address.Text;
         var state = await Task.Run(() => lab.DiagnoseAsync(endpoint));
@@ -51,6 +51,11 @@ internal sealed class UpdateProxyWindow : WorkflowWindow
             : Text["diag.routeMissing"];
         if (switches.SelectedItem is HostSwitch selected)
             route.Text += Environment.NewLine + string.Join(", ", selected.IPv4Networks);
+        if (network is { DestinationPrefix: not null } found)
+            route.Text += Environment.NewLine + $"{found.DestinationPrefix} → {found.NextHop ?? "—"}";
+        if (network?.OverlappingNats == true || network?.RouteConflicts > 0)
+            route.Text += Environment.NewLine + Text["trace.routeConflict"];
+        return network;
     }
 
     private async Task EnableAsync()
@@ -60,13 +65,19 @@ internal sealed class UpdateProxyWindow : WorkflowWindow
             throw new LabException("error.proxyLease");
         var spec = UpdateProxy.Create(switches.SelectedValue is Guid key ? key : Guid.Empty, address.Text, Integer(port.Text),
             DateTimeOffset.UtcNow.AddMinutes(minutes));
-        await CheckRouteAsync();
+        var network = await CheckRouteAsync();
+        spec = spec with { ReviewedRoute = spec.RouteFingerprint(network) ?? throw new LabException("error.proxyDrift") };
         if (!Text.Confirm(this, "confirm.proxy", $"{spec.Address}:{spec.Port}", route.Text))
             return;
         await Task.Run(async () =>
         {
-            ProxyLeaseWatcher.Start(id, lab.WorkspaceDirectory, spec.ExpiresUtc!.Value);
             await lab.SetUpdateProxyAsync(id, spec);
+            try { ProxyLeaseWatcher.Start(id, lab.WorkspaceDirectory, spec.ExpiresUtc!.Value); }
+            catch (Exception)
+            {
+                await lab.SetUpdateProxyAsync(id, null);
+                throw;
+            }
         });
         route.Text += Environment.NewLine + spec.ExpiresUtc!.Value.ToLocalTime().ToString("g");
         disable.IsEnabled = true;

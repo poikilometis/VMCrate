@@ -21,12 +21,11 @@ public sealed partial class LabService
             state.Operations.RemoveRange(0, state.Operations.Count - 512);
     }
 
-    public void RecordGuestProxy(Guid id, ProxyGuestTrace trace)
+    public void RecordGuestProxy(Guid id, ProxyGuestTrace trace, ProxyTarget? target = null)
     {
         using var workspaceLock = store.Lock();
         var state = store.Load();
         _ = ProxyBuilder(state, id);
-        RecordOperation(state, id, RecordedOperation.ProxyGuest, trace.Result.ToString());
-        store.Save(state);
+        RecordProxyGuest(state, id, trace, target);
     }
 }

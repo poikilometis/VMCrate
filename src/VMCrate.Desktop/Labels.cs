@@ -32,15 +32,19 @@ internal sealed class Labels(TextCatalog catalog) : INotifyPropertyChanged
 
     internal string ErrorText(Exception error) => this[error is LabException problem ? problem.Key : "error.operation"];
 
-    internal void ShowError(Window owner, Exception error)
+    internal void ShowError(Window? owner, Exception error)
     {
         var detail = error is LabException problem ? problem.Detail : error.Message;
         var message = ErrorText(error);
         if (!string.IsNullOrWhiteSpace(detail))
             message += Environment.NewLine + Environment.NewLine + detail[..Math.Min(detail.Length, 1200)];
 
-        MessageBox.Show(owner, message, this["status.error"], MessageBoxButton.OK,
-            MessageBoxImage.Warning, MessageBoxResult.OK, MessageOptions);
+        if (owner is null)
+            MessageBox.Show(message, this["status.error"], MessageBoxButton.OK,
+                MessageBoxImage.Warning, MessageBoxResult.OK, MessageOptions);
+        else
+            MessageBox.Show(owner, message, this["status.error"], MessageBoxButton.OK,
+                MessageBoxImage.Warning, MessageBoxResult.OK, MessageOptions);
     }
 
     internal MessageBoxOptions MessageOptions => Current.RightToLeft

@@ -2,12 +2,27 @@ name: Windows validation
 
 on:
   push:
+    branches: [main, 'release/**']
+    tags: ['v*']
   pull_request:
 
 permissions:
   contents: read
 
+concurrency:
+  group: validation-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
+  workflow_lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
+
   verify:
     runs-on: windows-latest
     timeout-minutes: 15
@@ -15,10 +30,17 @@ jobs:
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
       DOTNET_GENERATE_ASPNET_CERTIFICATE: "false"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-dotnet@v5
+      - name: Require tagged source to be on main
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor HEAD refs/remotes/origin/main
+          if ($LASTEXITCODE -ne 0) { throw 'Release tags must refer to a commit on main.' }
+      - uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
         with:
           dotnet-version: 10.0.x
       - run: dotnet build VMCrate.slnx -c Release
@@ -26,12 +48,81 @@ jobs:
       - run: dotnet run --project src/VMCrate.Cli -c Release --no-build -- validate examples/two-node-lab.json
       - run: dotnet run --project src/VMCrate.Cli -c Release --no-build -- validate-recipes examples/recipes.json
       - run: powershell -NoProfile -NonInteractive -File tests/HyperV.Tests.ps1
+      - name: Parse all PowerShell scripts
+        shell: pwsh
+        run: |
+          Get-ChildItem src,scripts,tests -Filter *.ps1 -File -Recurse | ForEach-Object {
+            $problems = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$problems)
+            if ($problems) { throw ($problems -join [Environment]::NewLine) }
+          }
+      - name: Parse Linux guest helpers
+        shell: bash
+        run: |
+          while IFS= read -r -d '' script; do bash -n "$script"; done < <(find src -name '*.sh' -print0)
       - name: Build release ZIP
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         shell: pwsh
         run: ./scripts/New-Release.ps1
+      - name: Build tagged release ZIP
+        if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+        shell: pwsh
+        env:
+          VMCRATE_SIGNING_PFX: ${{ secrets.VMCRATE_SIGNING_PFX }}
+          VMCRATE_SIGNING_PASSWORD: ${{ secrets.VMCRATE_SIGNING_PASSWORD }}
+          VMCRATE_TIMESTAMP_SERVER: ${{ vars.VMCRATE_TIMESTAMP_SERVER }}
+        run: ./scripts/New-TaggedRelease.ps1 -Tag $env:GITHUB_REF_NAME
+      - name: Verify checksum and launch from the ZIP
+        shell: pwsh
+        run: ./scripts/Test-ReleasePackage.ps1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: VMCrate-win-x64
           path: artifacts/releases/VMCrate-*.zip*
           if-no-files-found: error
           compression-level: 0
+
+  publish:
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+    needs: [verify, workflow_lint]
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    concurrency:
+      group: vmcrate-release-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: VMCrate-win-x64
+          path: artifacts/releases
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: artifacts/releases/VMCrate-*.zip
+      - name: Verify build provenance
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $archive = Get-ChildItem -LiteralPath artifacts/releases -Filter *.zip -File
+          if (@($archive).Count -ne 1) { throw 'Expected a single release archive.' }
+          $verify = @('attestation', 'verify', $archive.FullName, '--repo', $env:GITHUB_REPOSITORY,
+            '--signer-workflow', "$env:GITHUB_REPOSITORY/.github/workflows/ci.yml",
+            '--source-ref', $env:GITHUB_REF, '--source-digest', $env:GITHUB_SHA, '--deny-self-hosted-runners')
+          for ($attempt = 0; $attempt -lt 4; $attempt++) {
+            gh @verify
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Start-Sleep -Seconds 3
+          }
+          throw 'Release provenance could not be verified.'
+      - name: Publish release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/Publish-TaggedRelease.ps1 -Tag $env:GITHUB_REF_NAME -Repository $env:GITHUB_REPOSITORY

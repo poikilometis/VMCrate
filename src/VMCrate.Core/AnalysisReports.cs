@@ -35,13 +35,14 @@ public sealed partial class LabService
         return report with { Files = evidence.Concat(report.Files).Distinct().ToArray() };
     }
 
-    public async Task<TemplateIntegrity> VerifyTemplateAsync(Guid id)
+    public async Task<TemplateIntegrity> VerifyTemplateAsync(Guid id, CancellationToken cancellation = default,
+        IProgress<FileProgress>? progress = null)
     {
         using var workspaceLock = store.Lock();
         var state = store.Load();
         var template = FindTemplate(state, id);
         var path = LocalPaths.RequireFile(store.TemplateDisk(id), ".vhdx");
-        var digest = (await FileDigests.InspectAsync(path)).Sha256;
+        var digest = (await FileDigests.InspectAsync(path, cancellation, progress)).Sha256;
         if (template.Sha256 is not null)
             return new TemplateIntegrity(digest, string.Equals(template.Sha256, digest, StringComparison.OrdinalIgnoreCase));
 
